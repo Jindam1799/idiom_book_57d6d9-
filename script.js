@@ -274,7 +274,6 @@ document.addEventListener('DOMContentLoaded', () => {
       startTimer(30);
     }, 400);
   }
-
   // 6. 팝업 내 녹음 및 음성 제어
   btnRecordVoice.addEventListener('click', async () => {
     if (mediaRecorder && mediaRecorder.state === 'recording') {
@@ -290,14 +289,42 @@ document.addEventListener('DOMContentLoaded', () => {
         audioChunks = [];
         mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
         mediaRecorder.onstop = () => {
-          // 모바일(아이폰/안드로이드) 호환성을 위해 브라우저 기본 포맷 사용
+          // 모바일 호환성을 위해 브라우저 기본 포맷 사용
           const audioBlob = new Blob(audioChunks, {
             type: mediaRecorder.mimeType || 'audio/webm',
           });
           myRecordedAudioUrl = URL.createObjectURL(audioBlob);
           myRecordedAudioObj = new Audio(myRecordedAudioUrl);
           btnPlayMyVoice.disabled = false;
+
+          // --- 녹음 볼륨 증폭 (Web Audio API) ---
+          if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          }
+          if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+          }
+
+          try {
+            // 녹음된 오디오 소스에 증폭기(GainNode) 연결
+            const source =
+              audioCtx.createMediaElementSource(myRecordedAudioObj);
+            const gainNode = audioCtx.createGain();
+
+            gainNode.gain.value = 2; // 볼륨 2배 증폭
+
+            source.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+          } catch (err) {
+            console.warn('오디오 증폭 중 오류:', err);
+          }
+
+          // --- 녹음 완료 즉시 자동 재생 ---
+          myRecordedAudioObj
+            .play()
+            .catch((e) => console.log('자동 재생 차단됨:', e));
         };
+
         mediaRecorder.start();
         btnRecordVoice.innerText = '🛑 멈추기';
         btnRecordVoice.classList.add('recording');
@@ -307,14 +334,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // 내 발음 버튼을 누르면 증폭된 상태 그대로 다시 재생됨
   btnPlayMyVoice.addEventListener('click', () => {
-    if (myRecordedAudioObj) myRecordedAudioObj.play();
+    if (myRecordedAudioObj) {
+      myRecordedAudioObj.currentTime = 0; // 처음부터 다시 재생되도록 초기화
+      myRecordedAudioObj.play();
+    }
   });
 
   btnPlayTts.addEventListener('click', () => {
     playTTS(currentFullChinese);
   });
 
+  // ---- 실수로 빠졌던 다음 문장 버튼 로직 복구 ----
   btnNextSentence.addEventListener('click', () => {
     hidePopup(popupSuccess);
     window.speechSynthesis.cancel();
