@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>진담중국어 - 중국어 문장 배열 게임</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <audio id="bgm-lobby" src="lobby.mp3" loop></audio>
+
+    <!-- 팝업 오버레이 (배경 어둡게) -->
+    <div id="popup-overlay" class="hidden"></div>
+
+    <!-- 1. 게임 소개 팝업 -->
+    <div id="popup-intro" class="popup hidden">
+      <h2>게임 소개</h2>
+      <p>업데이트 중입니다!!!!</p>
+      <p>
+        제한 시간은 30초입니다. 모든 문장을 맞추고 중국어 실력을 높여보세요!
+      </p>
+      <button id="btn-close-intro" class="primary-btn mt-20">
+        로비로 이동
+      </button>
+    </div>
+
+    <!-- 2. 정답 성공 팝업 -->
+    <div id="popup-success" class="popup hidden">
+      <h2 class="success-title">정답입니다! 🎉</h2>
+      <div class="completed-sentence-box">
+        <p id="success-korean"></p>
+        <p id="success-chinese"></p>
+      </div>
+      <div class="popup-actions">
+        <button id="btn-replay-tts" class="icon-btn" title="다시 듣기">
+          🔊
+        </button>
+        <button id="btn-next-sentence" class="primary-btn">다음 문장</button>
+      </div>
+    </div>
+
+    <!-- 3. 복습(결과) 팝업 -->
+    <div id="popup-review" class="popup hidden">
+      <h2>오늘의 복습 📚</h2>
+      <p class="subtitle">수고하셨습니다! 학습한 문장들을 복습해 보세요.</p>
+      <div id="review-list" class="review-container">
+        <!-- JS에서 복습 리스트 생성 -->
+      </div>
+      <button id="btn-return-lobby" class="primary-btn mt-20">
+        로비로 돌아가기
+      </button>
+    </div>
+
+    <div id="app">
+      <!-- 인트로 화면 -->
+      <section id="screen-intro" class="screen active">
+        <div class="intro-content">
+          <h1 class="logo-title">진담중국어</h1>
+          <p class="subtitle">화면을 터치하여 시작하세요</p>
+        </div>
+      </section>
+
+      <!-- 로비 화면 -->
+      <section id="screen-lobby" class="screen">
+        <div id="day-buttons" class="grid-container">
+          <!-- JS에서 Day 버튼 생성 -->
+        </div>
+      </section>
+
+      <!-- 게임 화면 -->
+      <section id="screen-game" class="screen">
+        <div class="top-nav">
+          <button id="btn-ingame-lobby" class="text-btn">⬅ 로비로</button>
+          <div class="timer-box">
+            <span class="timer-icon">⏱️</span>
+            <span id="timer">30</span>
+          </div>
+        </div>
+
+        <div class="game-header">
+          <div class="status-bar">
+            <span id="level-indicator" class="badge">Level 1</span>
+          </div>
+          <div class="korean-box">
+            <h2 id="korean-sentence">한국어 문장</h2>
+          </div>
+        </div>
+
+        <div class="game-board">
+          <!-- 선택한 단어들이 배치되는 공간 -->
+          <div id="answer-slots" class="slots-container"></div>
+        </div>
+
+        <div class="game-controls">
+          <!-- 선택할 수 있는 흩어진 단어 카드들 -->
+          <div id="word-bank" class="words-container"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 데이터 파일 및 메인 로직 로드 -->
+    <script src="data.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>

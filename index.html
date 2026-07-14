@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>진담중국어 - 중국어 덩어리 훈련</title>
+    <link rel="stylesheet" href="style.css" />
+
+    <script>
+      (function () {
+        const userAgent = navigator.userAgent.toLowerCase();
+        if (
+          userAgent.indexOf('kakaotalk') > -1 &&
+          userAgent.indexOf('android') > -1
+        ) {
+          location.href =
+            'kakaotalk://web/openExternal?url=' +
+            encodeURIComponent(window.location.href);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <audio id="bgm-lobby" src="lobby.mp3" loop></audio>
+
+    <div id="popup-overlay" class="hidden"></div>
+
+    <div id="popup-intro" class="popup hidden">
+      <div id="intro-page-1" class="popup-page active">
+        <h2>👋 환영합니다!</h2>
+        <div class="intro-scroll-content">
+          <p>
+            이 게임은 중국어를 더 쉽고 자연스럽게 말할 수 있도록 만들었습니다.
+          </p>
+          <p>
+            <strong>'중국어 덩어리훈련'</strong>은 어순이 곧 어법인 중국어를
+            덩어리째 익혀, 문장이 입에서 자연스럽게 나오도록 설계된 훈련입니다.
+          </p>
+
+          <h3 class="intro-sub">🎯 목표</h3>
+          <p><strong>"중국어가 입에서 툭! 튀어나오게 만들기."</strong></p>
+          <p>
+            게임을 할 때는 버튼을 누를 때마다
+            <strong>반드시 소리 내어 말해 주세요.</strong><br />눈으로만 보는
+            것보다 직접 말할 때 효과가 훨씬 커집니다.
+          </p>
+
+          <h3 class="intro-sub">📅 추천 학습법</h3>
+          <p>하루 10문장<br />10일 동안 총 100문장 반복 훈련</p>
+          <p>
+            단어가 아니라 덩어리로,<br />공부가 아니라 반복으로,<br />중국어가
+            입에서 툭! 나옵니다.
+          </p>
+
+          <h3 class="intro-sub">💡 더 효과적으로 활용하려면</h3>
+          <p>
+            먼저 훈련 영상이나 훈련서로 학습한 뒤, 이 게임으로 반복 복습하면
+            학습 효과가 더욱 높아집니다.
+          </p>
+
+          <div class="credits">
+            🎥 훈련 영상 : 유튜브 〈중툭튀, 진담〉<br />
+            📘 교재 : 덩어리로 중국어문장 만들기 훈련 조동사<br /><br />
+            🌟 제작 : 진담중국어 전진아<br />
+            🌟 개발 : Dukimi
+          </div>
+        </div>
+        <div class="popup-actions-row">
+          <span class="page-indicator">1 / 2</span>
+          <button id="btn-next-intro" class="primary-btn small-btn">
+            다음 ▶
+          </button>
+        </div>
+      </div>
+
+      <div id="intro-page-2" class="popup-page hidden">
+        <h2>📢 업데이트 안내</h2>
+        <div class="intro-scroll-content">
+          <h3 class="intro-sub">✅ 녹음 기능이 추가되었습니다!</h3>
+          <p>문장을 따라 말하고 직접 녹음하며 발음을 확인해 보세요.</p>
+
+          <h3 class="intro-sub">📱 안드로이드(삼성) 기기 이용 안내</h3>
+          <p>
+            일부 안드로이드(삼성) 기기에서는 처음 재생되는 원어민 음성이
+            일시적으로 느리게 들릴 수 있습니다.
+          </p>
+          <p>
+            이는 기기에서 음성 엔진을 처음 불러오는 과정으로, 한두 번 재생한
+            이후에는 정상 속도로 재생됩니다.<br />안심하고 계속 이용해 주세요.
+            😊
+          </p>
+
+          <p class="closing-remark">
+            즐거운 훈련 되세요! 💪<br />오늘도 중국어가 입에서 '툭!'
+          </p>
+        </div>
+        <div class="popup-actions-row">
+          <button id="btn-prev-intro" class="text-btn">◀ 이전</button>
+          <span class="page-indicator">2 / 2</span>
+          <button id="btn-close-intro" class="primary-btn small-btn">
+            시작하기
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="popup-success" class="popup hidden">
+      <h2 class="success-title">정답입니다! 🎉</h2>
+      <div class="completed-sentence-box">
+        <p id="success-korean"></p>
+        <p id="success-chinese"></p>
+      </div>
+
+      <div class="recorder-box">
+        <p class="recorder-guide">
+          마이크 버튼을 눌러 내 발음을 녹음해 보세요! (선택)
+        </p>
+        <div class="voice-btns">
+          <button id="btn-record-voice" class="btn-voice">🎙️ 녹음하기</button>
+          <button id="btn-play-my-voice" class="btn-voice" disabled>
+            🎧 내 발음
+          </button>
+          <button id="btn-play-tts" class="btn-voice">🔊 원어민</button>
+        </div>
+      </div>
+
+      <div class="popup-actions">
+        <button id="btn-next-sentence" class="primary-btn">다음 문장</button>
+      </div>
+    </div>
+
+    <div id="popup-review" class="popup hidden">
+      <h2>오늘의 복습 📚</h2>
+      <p class="subtitle">틀렸던 문장은 붉은색으로 표시됩니다.</p>
+      <div id="review-list" class="review-container"></div>
+      <button id="btn-return-lobby" class="primary-btn mt-20">
+        로비로 돌아가기
+      </button>
+    </div>
+
+    <div id="app">
+      <section id="screen-intro" class="screen active">
+        <div class="intro-content">
+          <p class="pre-title">진심이 담긴</p>
+          <h1 class="logo-title">진담중국어</h1>
+          <p class="subtitle">화면을 터치하여 시작하세요</p>
+        </div>
+      </section>
+
+      <section id="screen-lobby" class="screen">
+        <div id="day-buttons" class="grid-container"></div>
+      </section>
+
+      <section id="screen-game" class="screen">
+        <div class="top-nav">
+          <button id="btn-ingame-lobby" class="text-btn">⬅ 로비로</button>
+          <div class="timer-box">
+            <span class="timer-icon">⏱️</span>
+            <span id="timer">30</span>
+          </div>
+        </div>
+
+        <div class="game-header">
+          <div class="status-bar">
+            <span id="level-indicator" class="badge">Level 1</span>
+          </div>
+          <div class="korean-box">
+            <h2 id="korean-sentence">한국어 문장</h2>
+          </div>
+        </div>
+
+        <div class="game-board">
+          <div id="answer-slots" class="slots-container"></div>
+        </div>
+
+        <div class="game-controls">
+          <div id="word-bank" class="words-container"></div>
+        </div>
+      </section>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
