@@ -28,6 +28,7 @@
 
     <div id="popup-overlay" class="hidden"></div>
 
+    <!-- 1. 기존 인트로 팝업 -->
     <div id="popup-intro" class="popup hidden">
       <div id="intro-page-1" class="popup-page active">
         <h2>👋 환영합니다!</h2>
@@ -101,10 +102,46 @@
           <button id="btn-prev-intro" class="text-btn">◀ 이전</button>
           <span class="page-indicator">2 / 2</span>
           <button id="btn-close-intro" class="primary-btn small-btn">
-            시작하기
+            다음 ▶
           </button>
         </div>
       </div>
+    </div>
+
+    <!-- 1.5. 추가된 삼성 브라우저 경고 팝업 (테마 자동 맞춤형) -->
+    <div id="popup-warning" class="popup hidden">
+      <h2 style="color: var(--main-dark); margin-bottom: 20px">
+        ⚠️ 삼성 갤럭시 필독!
+      </h2>
+      <div
+        style="
+          text-align: left;
+          line-height: 1.6;
+          color: var(--text-color);
+          margin-bottom: 25px;
+        "
+      >
+        <p style="margin-bottom: 15px">
+          <strong>삼성 인터넷 브라우저</strong>로 접속 시 원어민 음성이
+          한국어처럼 어색하게 들리는 현상이 있습니다.
+        </p>
+        <div
+          style="
+            background: var(--slot-bg);
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px dashed var(--main-color);
+          "
+        >
+          <p style="margin: 0; color: var(--main-dark); font-weight: bold">
+            💡 링크를 복사하여 구글 크롬(Chrome) 앱으로 열어주시면 맑고 깨끗한
+            중국어 원어민 발음으로 바로 학습하실 수 있습니다! 😊
+          </p>
+        </div>
+      </div>
+      <button id="btn-close-warning" class="primary-btn" style="width: 100%">
+        확인하고 시작하기
+      </button>
     </div>
 
     <div id="popup-success" class="popup hidden">
