@@ -9,6 +9,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const popupSuccess = document.getElementById('popup-success');
   const popupReview = document.getElementById('popup-review');
 
+  // ▼ 이 두 줄을 새롭게 추가해 줍니다 ▼
+  const popupWarning = document.getElementById('popup-warning');
+  const btnCloseWarning = document.getElementById('btn-close-warning');
+
   // --- 팝업 페이징 엘리먼트 ---
   const introPage1 = document.getElementById('intro-page-1');
   const introPage2 = document.getElementById('intro-page-2');
@@ -96,7 +100,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let audioChunks = [];
   let myRecordedAudioUrl = null;
   let myRecordedAudioObj = null;
-
   // 1. 인트로 및 팝업 흐름 제어
   screenIntro.addEventListener('click', () => {
     showPopup(popupIntro);
@@ -116,6 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
     introPage1.classList.add('active');
   });
 
+  // 인트로 '다음' 버튼 클릭 시
   btnCloseIntro.addEventListener('click', () => {
     hidePopup(popupIntro);
     // 다음 오픈을 위해 1페이지로 리셋
@@ -123,6 +127,14 @@ document.addEventListener('DOMContentLoaded', () => {
     introPage2.classList.add('hidden');
     introPage1.classList.remove('hidden');
     introPage1.classList.add('active');
+
+    // ▼ 로비로 가지 않고 경고 팝업을 띄움 ▼
+    showPopup(popupWarning);
+  });
+
+  // 경고 팝업 '확인하고 시작하기' 버튼 클릭 시
+  btnCloseWarning.addEventListener('click', () => {
+    hidePopup(popupWarning);
 
     switchScreen(screenLobby);
     initLobby();
