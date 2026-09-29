@@ -1,459 +1,1077 @@
+/* =========================================================
+   진담중국어 덩어리훈련 · 관용구 — 문장 배열 게임
+   ========================================================= */
 document.addEventListener('DOMContentLoaded', () => {
-  // --- 화면 및 팝업 엘리먼트 ---
-  const screenIntro = document.getElementById('screen-intro');
-  const screenLobby = document.getElementById('screen-lobby');
-  const screenGame = document.getElementById('screen-game');
+  const $ = (id) => document.getElementById(id);
 
-  const popupOverlay = document.getElementById('popup-overlay');
-  const popupIntro = document.getElementById('popup-intro');
-  const popupSuccess = document.getElementById('popup-success');
-  const popupReview = document.getElementById('popup-review');
+  // ---------- 화면 / 팝업 ----------
+  const screens = {
+    intro: $('screen-intro'),
+    lobby: $('screen-lobby'),
+    game: $('screen-game'),
+    speak: $('screen-speak'),
+  };
+  const popupOverlay = $('popup-overlay');
+  const popups = {
+    intro: $('popup-intro'),
+    warning: $('popup-warning'),
+    resume: $('popup-resume'),
+    timeout: $('popup-timeout'),
+    success: $('popup-success'),
+    review: $('popup-review'),
+    exit: $('popup-exit'),
+  };
 
-  // ▼ 이 두 줄을 새롭게 추가해 줍니다 ▼
-  const popupWarning = document.getElementById('popup-warning');
-  const btnCloseWarning = document.getElementById('btn-close-warning');
+  // ---------- 게임 요소 ----------
+  const dayButtonsContainer = $('day-buttons');
+  const levelIndicator = $('level-indicator');
+  const finalBadge = $('final-badge');
+  const retryBadge = $('retry-badge');
+  const timerDisplay = $('timer');
+  const timerBox = timerDisplay.parentElement;
+  const timerFill = $('timer-fill');
+  const progressText = $('progress-text');
+  const progressFill = $('progress-fill');
+  const koreanSentence = $('korean-sentence');
+  const answerSlots = $('answer-slots');
+  const wordBank = $('word-bank');
+  const bgmLobby = $('bgm-lobby');
+  const toastEl = $('toast');
 
-  // --- 팝업 페이징 엘리먼트 ---
-  const introPage1 = document.getElementById('intro-page-1');
-  const introPage2 = document.getElementById('intro-page-2');
-  const btnNextIntro = document.getElementById('btn-next-intro');
-  const btnPrevIntro = document.getElementById('btn-prev-intro');
-  const btnCloseIntro = document.getElementById('btn-close-intro');
+  const btnRecordVoice = $('btn-record-voice');
+  const btnPlayMyVoice = $('btn-play-my-voice');
+  const btnPlayTts = $('btn-play-tts');
+  const btnTtsRate = $('btn-tts-rate');
 
-  // --- 게임 내부 엘리먼트 ---
-  const dayButtonsContainer = document.getElementById('day-buttons');
-  const levelIndicator = document.getElementById('level-indicator');
-  const timerDisplay = document.getElementById('timer');
-  const koreanSentence = document.getElementById('korean-sentence');
-  const answerSlots = document.getElementById('answer-slots');
-  const wordBank = document.getElementById('word-bank');
+  const DATA = window.sentenceData || {};
 
-  const bgmLobby = document.getElementById('bgm-lobby');
+  // =========================================================
+  // 저장 (이 기기의 브라우저에만 저장됨)
+  // =========================================================
+  const STORE_KEY = 'jindam_gwanyonggu_v2';
+  const defaultStore = () => ({
+    settings: { bgm: true, pinyin: true, slow: false },
+    weeks: {},
+  });
+  let store = defaultStore();
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      store = {
+        settings: Object.assign(defaultStore().settings, parsed.settings || {}),
+        weeks: parsed.weeks || {},
+      };
+    }
+  } catch (e) {
+    /* 저장소를 쓸 수 없는 환경 — 메모리로만 동작 */
+  }
+  function saveStore() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(store));
+    } catch (e) {
+      /* 무시 */
+    }
+  }
+  function weekRecord(key) {
+    if (!store.weeks[key]) store.weeks[key] = { best: 0, cleared: false, resume: null };
+    return store.weeks[key];
+  }
 
-  // --- 기타 버튼 ---
-  const btnNextSentence = document.getElementById('btn-next-sentence');
-  const btnReturnLobby = document.getElementById('btn-return-lobby');
-  const btnIngameLobby = document.getElementById('btn-ingame-lobby');
-
-  const btnRecordVoice = document.getElementById('btn-record-voice');
-  const btnPlayMyVoice = document.getElementById('btn-play-my-voice');
-  const btnPlayTts = document.getElementById('btn-play-tts');
-
-  // --- 상태 변수 ---
-  let currentDayData = [];
-  let currentSentenceIndex = 0;
-  let timerInterval = null;
-  let timeLeft = 30;
-  let targetSentenceData = [];
-  let currentAnswer = [];
-  let currentFullChinese = '';
-  let mistakeTracker = {};
-
-  // --- Web Audio API (유저 터치 시점에 지연 생성하여 오류 방지) ---
+  // =========================================================
+  // 효과음 (Web Audio — 첫 터치 이후 생성)
+  // =========================================================
   let audioCtx = null;
-
-  function playClickSound() {
-    // 최초 터치 시점에 AudioContext 생성 (브라우저 정책 우회)
+  function ensureCtx() {
     if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      audioCtx = new Ctx();
     }
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume();
-    }
-
-    const oscillator = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(400, audioCtx.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(
-      100,
-      audioCtx.currentTime + 0.1,
-    );
-
-    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(
-      0.01,
-      audioCtx.currentTime + 0.1,
-    );
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-
-    oscillator.start();
-    oscillator.stop(audioCtx.currentTime + 0.1);
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
   }
+  function tone(freq, endFreq, dur, type = 'sine', vol = 0.25, delay = 0) {
+    const ctx = ensureCtx();
+    if (!ctx) return;
+    const t0 = ctx.currentTime + delay;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    osc.frequency.exponentialRampToValueAtTime(endFreq, t0 + dur);
+    gain.gain.setValueAtTime(vol, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+  }
+  const sfx = {
+    click: () => tone(400, 100, 0.1),
+    back: () => tone(260, 180, 0.08, 'sine', 0.18),
+    correct: () => {
+      tone(660, 660, 0.12, 'triangle', 0.25);
+      tone(990, 990, 0.2, 'triangle', 0.25, 0.1);
+    },
+    wrong: () => tone(180, 110, 0.25, 'square', 0.12),
+    hint: () => tone(880, 1200, 0.15, 'sine', 0.18),
+    clear: () => {
+      [523, 659, 784, 1047].forEach((f, i) => tone(f, f, 0.18, 'triangle', 0.2, i * 0.12));
+    },
+  };
 
-  // --- TTS 음성 세팅 ---
+  // =========================================================
+  // TTS (중국어 원어민 음성)
+  // =========================================================
+  const hasTTS = 'speechSynthesis' in window;
   let synthVoices = [];
+  let zhVoice = null;
   function loadVoices() {
-    if ('speechSynthesis' in window)
-      synthVoices = window.speechSynthesis.getVoices();
+    if (!hasTTS) return;
+    synthVoices = window.speechSynthesis.getVoices();
+    const norm = (l) => (l || '').replace('_', '-').toLowerCase();
+    // 보통화(zh-CN) 우선, 광둥어·홍콩 음성은 제외
+    let pool = synthVoices.filter((v) => ['zh-cn', 'cmn-cn', 'cmn-hans-cn'].includes(norm(v.lang)));
+    if (!pool.length) {
+      pool = synthVoices.filter(
+        (v) => norm(v.lang).startsWith('zh') && !/hk|yue|mo/.test(norm(v.lang)),
+      );
+    }
+    zhVoice =
+      pool.find((v) => /Xiaoxiao|Xiaoyi|Tingting|Ting-Ting|Yaoyao|Huihui|Google/i.test(v.name)) ||
+      pool[0] ||
+      null;
   }
-  if ('speechSynthesis' in window) {
-    window.speechSynthesis.onvoiceschanged = loadVoices;
+  if (hasTTS) {
     loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }
+  function ttsRate() {
+    return store.settings.slow ? 0.5 : 0.7;
+  }
+  function playTTS(text, btn) {
+    if (!hasTTS) {
+      showToast('이 브라우저는 음성 재생을 지원하지 않아요');
+      return;
+    }
+    stopMyVoice();
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN';
+    u.rate = ttsRate();
+    if (zhVoice) u.voice = zhVoice;
+    if (btn) {
+      u.onstart = () => btn.classList.add('playing');
+      u.onend = u.onerror = () => btn.classList.remove('playing');
+    }
+    window.speechSynthesis.speak(u);
+  }
+  function stopTTS() {
+    if (hasTTS) window.speechSynthesis.cancel();
+    document.querySelectorAll('.btn-voice.playing').forEach((b) => b.classList.remove('playing'));
+  }
+  function updateRateButton() {
+    btnTtsRate.textContent = store.settings.slow ? '🐢 느리게' : '🐇 기본 속도';
   }
 
-  // --- 녹음 세팅 ---
-  let mediaRecorder;
-  let audioChunks = [];
-  let myRecordedAudioUrl = null;
-  let myRecordedAudioObj = null;
-  // 1. 인트로 및 팝업 흐름 제어
-  screenIntro.addEventListener('click', () => {
-    showPopup(popupIntro);
+  // =========================================================
+  // 공통 유틸
+  // =========================================================
+  function openPopup(el) {
+    Object.values(popups).forEach((p) => p.classList.add('hidden'));
+    popupOverlay.classList.remove('hidden');
+    el.classList.remove('hidden');
+  }
+  function closePopup(el) {
+    el.classList.add('hidden');
+    popupOverlay.classList.add('hidden');
+  }
+  function switchScreen(name) {
+    Object.values(screens).forEach((s) => s.classList.remove('active'));
+    screens[name].classList.add('active');
+    currentScreen = name;
+    if (name === 'lobby') playBgm();
+    else pauseBgm();
+  }
+  let toastTimer = null;
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.add('hidden'), 2200);
+  }
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+  function fullChinese(s) {
+    return s.chinese.hanzi.join('');
+  }
+  function fullPinyin(s) {
+    return s.chinese.pinyin.filter(Boolean).join(' ');
+  }
+  function weekLabel(key) {
+    return key.replace(/^([a-z]+)(\d+)$/i, (m, w, n) => `${w.toUpperCase()} ${n}`);
+  }
+
+  // =========================================================
+  // 배경음 / 설정
+  // =========================================================
+  let currentScreen = 'intro';
+  function playBgm() {
+    if (!store.settings.bgm || currentScreen !== 'lobby') return;
+    bgmLobby.volume = 0.6;
+    bgmLobby.play().catch(() => {});
+  }
+  function pauseBgm() {
+    bgmLobby.pause();
+  }
+  function applySettings() {
+    document.body.classList.toggle('no-pinyin', !store.settings.pinyin);
+    const bgmBtn = $('btn-toggle-bgm');
+    bgmBtn.textContent = store.settings.bgm ? '🎵 배경음 ON' : '🎵 배경음 OFF';
+    bgmBtn.classList.toggle('off', !store.settings.bgm);
+    ['btn-toggle-pinyin', 'btn-toggle-pinyin-lobby'].forEach((id) => {
+      const b = $(id);
+      b.textContent = store.settings.pinyin ? '병음 ON' : '병음 OFF';
+      b.classList.toggle('off', !store.settings.pinyin);
+    });
+    updateRateButton();
+  }
+  $('btn-toggle-bgm').addEventListener('click', () => {
+    store.settings.bgm = !store.settings.bgm;
+    saveStore();
+    applySettings();
+    if (store.settings.bgm) playBgm();
+    else pauseBgm();
+  });
+  const togglePinyin = () => {
+    store.settings.pinyin = !store.settings.pinyin;
+    saveStore();
+    applySettings();
+  };
+  $('btn-toggle-pinyin').addEventListener('click', togglePinyin);
+  $('btn-toggle-pinyin-lobby').addEventListener('click', togglePinyin);
+  applySettings();
+
+  // =========================================================
+  // 1. 인트로 → 소개 → (삼성 안내) → 로비
+  // =========================================================
+  const introPage1 = $('intro-page-1');
+  const introPage2 = $('intro-page-2');
+  function showIntroPage(n) {
+    introPage1.classList.toggle('active', n === 1);
+    introPage1.classList.toggle('hidden', n !== 1);
+    introPage2.classList.toggle('active', n === 2);
+    introPage2.classList.toggle('hidden', n !== 2);
+  }
+  const isSamsungBrowser = /SamsungBrowser/i.test(navigator.userAgent);
+
+  screens.intro.addEventListener('click', () => {
+    ensureCtx();
+    showIntroPage(1);
+    openPopup(popups.intro);
+  });
+  $('btn-next-intro').addEventListener('click', () => showIntroPage(2));
+  $('btn-prev-intro').addEventListener('click', () => showIntroPage(1));
+  $('btn-close-intro').addEventListener('click', () => {
+    closePopup(popups.intro);
+    showIntroPage(1);
+    if (currentScreen === 'lobby') return; // 로비에서 소개를 다시 연 경우
+    if (isSamsungBrowser) openPopup(popups.warning);
+    else goLobby();
+  });
+  $('btn-open-intro').addEventListener('click', () => {
+    showIntroPage(1);
+    openPopup(popups.intro);
+  });
+  $('btn-close-warning').addEventListener('click', () => {
+    closePopup(popups.warning);
+    goLobby();
+  });
+  $('btn-copy-link').addEventListener('click', async () => {
+    const url = location.href;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('링크를 복사했어요! 크롬에 붙여넣어 주세요');
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        showToast('링크를 복사했어요! 크롬에 붙여넣어 주세요');
+      } catch (err) {
+        showToast('복사에 실패했어요. 주소창의 링크를 직접 복사해 주세요');
+      }
+      ta.remove();
+    }
   });
 
-  btnNextIntro.addEventListener('click', () => {
-    introPage1.classList.remove('active');
-    introPage1.classList.add('hidden');
-    introPage2.classList.remove('hidden');
-    introPage2.classList.add('active');
-  });
-
-  btnPrevIntro.addEventListener('click', () => {
-    introPage2.classList.remove('active');
-    introPage2.classList.add('hidden');
-    introPage1.classList.remove('hidden');
-    introPage1.classList.add('active');
-  });
-
-  // 인트로 '다음' 버튼 클릭 시
-  btnCloseIntro.addEventListener('click', () => {
-    hidePopup(popupIntro);
-    // 다음 오픈을 위해 1페이지로 리셋
-    introPage2.classList.remove('active');
-    introPage2.classList.add('hidden');
-    introPage1.classList.remove('hidden');
-    introPage1.classList.add('active');
-
-    // ▼ 로비로 가지 않고 경고 팝업을 띄움 ▼
-    showPopup(popupWarning);
-  });
-
-  // 경고 팝업 '확인하고 시작하기' 버튼 클릭 시
-  btnCloseWarning.addEventListener('click', () => {
-    hidePopup(popupWarning);
-
-    switchScreen(screenLobby);
-    initLobby();
-    bgmLobby.play().catch((e) => console.log('BGM Play Error:', e));
-  });
-
-  // 2. 로비 초기화 함수
-  function initLobby() {
+  // =========================================================
+  // 2. 로비
+  // =========================================================
+  function goLobby() {
+    stopTimer();
+    stopTTS();
+    stopRecording(true);
+    buildLobby();
+    switchScreen('lobby');
+  }
+  function buildLobby() {
     dayButtonsContainer.innerHTML = '';
-    if (!window.sentenceData) return; // 데이터 로드 확인
-    const days = Object.keys(window.sentenceData);
-    days.forEach((day) => {
+    Object.keys(DATA).forEach((key) => {
+      const rec = weekRecord(key);
+      const total = DATA[key].length;
       const btn = document.createElement('button');
-      btn.innerText = day.toUpperCase();
-      btn.addEventListener('click', () => startGame(day));
+      btn.className = 'week-btn' + (rec.cleared ? ' cleared' : '');
+
+      const name = document.createElement('span');
+      name.className = 'w-name';
+      name.textContent = weekLabel(key);
+      const count = document.createElement('span');
+      count.className = 'w-count';
+      count.textContent = `문장 ${total}개`;
+      const stars = document.createElement('span');
+      stars.className = 'w-stars';
+      stars.innerHTML = [1, 2, 3]
+        .map((n) => `<span class="${rec.best >= n ? 'on' : ''}">★</span>`)
+        .join('');
+      btn.append(name, count, stars);
+
+      if (rec.resume && rec.resume.pos > 0 && rec.resume.pos < total) {
+        const badge = document.createElement('span');
+        badge.className = 'w-resume';
+        badge.textContent = `이어하기 ${rec.resume.pos}/${total}`;
+        btn.appendChild(badge);
+      }
+      btn.addEventListener('click', () => {
+        sfx.click();
+        onWeekSelect(key);
+      });
       dayButtonsContainer.appendChild(btn);
     });
   }
 
-  btnIngameLobby.addEventListener('click', () => {
-    stopTimer();
-    switchScreen(screenLobby);
-    bgmLobby.play().catch((e) => console.log(e));
+  let pendingWeek = null;
+  function onWeekSelect(key) {
+    const rec = weekRecord(key);
+    const total = DATA[key].length;
+    if (rec.resume && rec.resume.pos > 0 && rec.resume.pos < total) {
+      pendingWeek = key;
+      $('resume-title').textContent = weekLabel(key);
+      $('resume-desc').textContent = `지난번에 ${rec.resume.pos}문장까지 했어요. 이어서 할까요?`;
+      openPopup(popups.resume);
+    } else {
+      startSession(key, 'normal');
+    }
+  }
+  $('btn-resume-continue').addEventListener('click', () => {
+    closePopup(popups.resume);
+    startSession(pendingWeek, 'normal', weekRecord(pendingWeek).resume);
   });
-
-  btnReturnLobby.addEventListener('click', () => {
-    hidePopup(popupReview);
-    switchScreen(screenLobby);
-    bgmLobby.play().catch((e) => console.log(e));
+  $('btn-resume-restart').addEventListener('click', () => {
+    closePopup(popups.resume);
+    weekRecord(pendingWeek).resume = null;
+    saveStore();
+    startSession(pendingWeek, 'normal');
   });
+  $('btn-resume-cancel').addEventListener('click', () => closePopup(popups.resume));
 
-  // 3. 게임 시작 로직
-  function startGame(dayKey) {
-    currentDayData = window.sentenceData[dayKey];
-    currentSentenceIndex = 0;
-    mistakeTracker = {};
+  // =========================================================
+  // 3. 세션 (한 주차 / 오답 복습)
+  // =========================================================
+  let session = null;
+  let groupInfo = [];
 
-    bgmLobby.pause();
-    bgmLobby.currentTime = 0;
+  function buildGroupInfo(list) {
+    const info = [];
+    let group = 0;
+    let prevId = null;
+    let start = 0;
+    list.forEach((s, i) => {
+      if (s.id !== prevId) {
+        if (prevId !== null) {
+          for (let k = start; k < i; k++) info[k].steps = i - start;
+        }
+        group++;
+        start = i;
+        prevId = s.id;
+      }
+      info[i] = { group, step: i - start + 1, steps: 0 };
+    });
+    for (let k = start; k < list.length; k++) info[k].steps = list.length - start;
+    return info;
+  }
 
-    switchScreen(screenGame);
+  function startSession(weekKey, mode, resume) {
+    const list = DATA[weekKey];
+    if (!list || !list.length) return;
+    groupInfo = buildGroupInfo(list);
+    const queue = mode === 'retry' ? resume.queue : list.map((_, i) => i);
+    session = {
+      weekKey,
+      list,
+      mode,
+      queue,
+      pos: mode === 'normal' && resume ? resume.pos : 0,
+      wrong: new Set(mode === 'normal' && resume ? resume.wrong || [] : []),
+      hinted: new Set(mode === 'normal' && resume ? resume.hinted || [] : []),
+    };
+    switchScreen('game');
     loadSentence();
   }
 
+  function saveResume() {
+    if (!session || session.mode !== 'normal') return;
+    const rec = weekRecord(session.weekKey);
+    rec.resume = {
+      pos: session.pos,
+      wrong: [...session.wrong],
+      hinted: [...session.hinted],
+    };
+    saveStore();
+  }
+
+  // =========================================================
+  // 4. 문장 로드 & 카드 조작
+  // =========================================================
+  let target = [];
+  let placed = []; // { item, bankEl, slotEl, locked }
+  let busy = false;
+  let solved = false;
+  let timeLimit = 30;
+
+  function currentIndex() {
+    return session.queue[session.pos];
+  }
+  function currentSentence() {
+    return session.list[currentIndex()];
+  }
+
   function loadSentence() {
-    const sentenceObj = currentDayData[currentSentenceIndex];
+    const s = currentSentence();
+    const g = groupInfo[currentIndex()];
 
     answerSlots.innerHTML = '';
     wordBank.innerHTML = '';
-    currentAnswer = [];
-    screenGame.classList.remove('shake-screen');
+    answerSlots.classList.remove('all-correct');
+    screens.game.classList.remove('shake-screen');
+    placed = [];
+    busy = false;
+    solved = false;
+    resetRecorderUI();
 
-    // 녹음 초기화
-    myRecordedAudioUrl = null;
-    if (myRecordedAudioObj) {
-      myRecordedAudioObj.pause();
-      myRecordedAudioObj = null;
-    }
-    btnPlayMyVoice.disabled = true;
-    btnRecordVoice.innerText = '🎙️ 녹음하기';
-    btnRecordVoice.classList.remove('recording');
-
-    targetSentenceData = sentenceObj.chinese.hanzi.map((h, i) => ({
+    target = s.chinese.hanzi.map((h, i) => ({
       hanzi: h,
-      pinyin: sentenceObj.chinese.pinyin[i],
+      pinyin: s.chinese.pinyin[i] || '',
       id: i,
     }));
-    currentFullChinese = targetSentenceData.map((t) => t.hanzi).join('');
 
-    if (sentenceObj.isFinal) screenGame.classList.add('is-final');
-    else screenGame.classList.remove('is-final');
+    // 카드가 많으면 자동 축소
+    const charCount = target.reduce((n, t) => n + t.hanzi.length, 0);
+    const dense = target.length >= 8 || charCount >= 16;
+    answerSlots.classList.toggle('dense', dense);
+    wordBank.classList.toggle('dense', dense);
 
-    levelIndicator.innerText = `Level ${sentenceObj.level}`;
-    koreanSentence.innerText = sentenceObj.korean;
+    screens.game.classList.toggle('is-final', !!s.isFinal);
+    finalBadge.classList.toggle('hidden', !s.isFinal);
+    retryBadge.classList.toggle('hidden', session.mode !== 'retry');
+    levelIndicator.textContent = `표현 ${g.group} · ${g.step}/${g.steps}단계`;
+    koreanSentence.textContent = s.korean;
 
-    let shuffledWords = [...targetSentenceData].sort(() => Math.random() - 0.5);
+    const total = session.queue.length;
+    progressText.textContent = `${session.pos + 1} / ${total}`;
+    progressFill.style.width = `${(session.pos / total) * 100}%`;
 
-    shuffledWords.forEach((item) => {
-      const card = createWordCardUI(item);
-      card.addEventListener('click', () => handleWordClick(item, card));
+    // 섞기 — 정답 순서 그대로 나오지 않도록
+    const answerKey = target.map((t) => t.hanzi).join('|');
+    let order = shuffle(target);
+    const canDiffer = new Set(target.map((t) => t.hanzi)).size > 1;
+    for (let tries = 0; canDiffer && tries < 30; tries++) {
+      if (order.map((t) => t.hanzi).join('|') !== answerKey) break;
+      order = shuffle(target);
+    }
+    order.forEach((item) => {
+      const card = createCard(item);
+      card.addEventListener('click', () => {
+        if (busy || solved || card.classList.contains('used')) return;
+        sfx.click();
+        placeCard(item, card);
+        afterPlace();
+      });
       wordBank.appendChild(card);
     });
 
-    startTimer();
+    updatePlaceholder();
+    timeLimit = Math.max(30, target.length * 4);
+    startTimer(timeLimit);
   }
 
-  function createWordCardUI(item) {
+  function createCard(item) {
     const card = document.createElement('div');
     card.className = 'word-card';
     card.dataset.id = item.id;
-    card.innerHTML = `<div class="pinyin">${item.pinyin}</div><div class="hanzi">${item.hanzi}</div>`;
+    const p = document.createElement('div');
+    p.className = 'pinyin';
+    p.textContent = item.pinyin;
+    const h = document.createElement('div');
+    h.className = 'hanzi';
+    h.textContent = item.hanzi;
+    card.append(p, h);
     return card;
   }
 
-  // 4. 단어 터치 로직
-  function handleWordClick(item, originalCard) {
-    if (originalCard.classList.contains('hidden')) return;
-
-    playClickSound(); // 툭 소리 재생
-    originalCard.classList.add('hidden');
-
-    const slotCard = createWordCardUI(item);
-    slotCard.addEventListener('click', () => {
-      playClickSound();
-      answerSlots.removeChild(slotCard);
-      originalCard.classList.remove('hidden');
-      currentAnswer = currentAnswer.filter((ans) => ans.id !== item.id);
+  function placeCard(item, bankEl, locked = false) {
+    bankEl.classList.add('used');
+    const slotEl = createCard(item);
+    slotEl.classList.add('placed');
+    const entry = { item, bankEl, slotEl, locked };
+    if (locked) slotEl.classList.add('locked');
+    slotEl.addEventListener('click', () => {
+      if (busy || solved || entry.locked) return;
+      sfx.back();
+      removeEntry(entry);
     });
-
-    answerSlots.appendChild(slotCard);
-    currentAnswer.push(item);
-
-    if (currentAnswer.length === targetSentenceData.length) checkAnswer();
+    placed.push(entry);
+    answerSlots.appendChild(slotEl);
+    updatePlaceholder();
+    return entry;
   }
 
-  // 5. 정답 확인
+  function removeEntry(entry) {
+    entry.slotEl.remove();
+    entry.bankEl.classList.remove('used');
+    placed = placed.filter((e) => e !== entry);
+    updatePlaceholder();
+  }
+
+  function removeUnlocked() {
+    placed.filter((e) => !e.locked).forEach(removeEntry);
+  }
+
+  function updatePlaceholder() {
+    const has = answerSlots.querySelector('.word-card');
+    let ph = answerSlots.querySelector('.slots-placeholder');
+    if (!has && !ph) {
+      ph = document.createElement('span');
+      ph.className = 'slots-placeholder';
+      ph.textContent = '카드를 순서대로 눌러 문장을 완성하세요';
+      answerSlots.appendChild(ph);
+    } else if (has && ph) {
+      ph.remove();
+    }
+  }
+
+  function afterPlace() {
+    if (placed.length === target.length) checkAnswer();
+  }
+
+  function firstMismatch() {
+    for (let i = 0; i < placed.length; i++) {
+      if (placed[i].item.hanzi !== target[i].hanzi) return i;
+    }
+    return -1;
+  }
+
+  // =========================================================
+  // 5. 정답 확인 — 맞은 앞부분은 고정, 틀린 뒷부분만 돌려보냄
+  // =========================================================
   function checkAnswer() {
-    stopTimer();
-    const isCorrect = currentAnswer.every(
-      (val, idx) => val.hanzi === targetSentenceData[idx].hanzi,
-    );
-
-    if (isCorrect) {
-      document.getElementById('success-korean').innerText =
-        currentDayData[currentSentenceIndex].korean;
-      document.getElementById('success-chinese').innerText = currentFullChinese;
-
-      showPopup(popupSuccess);
-      playTTS(currentFullChinese);
-    } else {
-      handleErrorOrTimeout();
+    const miss = firstMismatch();
+    if (miss === -1) {
+      onSolved(false);
+      return;
     }
-  }
+    session.wrong.add(currentIndex());
+    sfx.wrong();
+    busy = true;
 
-  function handleErrorOrTimeout() {
-    stopTimer();
-    mistakeTracker[currentSentenceIndex] = true;
+    screens.game.classList.remove('shake-screen');
+    void screens.game.offsetWidth;
+    screens.game.classList.add('shake-screen');
 
-    screenGame.classList.remove('shake-screen');
-    void screenGame.offsetWidth;
-    screenGame.classList.add('shake-screen');
-
-    setTimeout(() => {
-      answerSlots.innerHTML = '';
-      currentAnswer = [];
-      Array.from(wordBank.children).forEach((c) =>
-        c.classList.remove('hidden'),
-      );
-      startTimer(30);
-    }, 400);
-  }
-  // 6. 팝업 내 녹음 및 음성 제어
-  btnRecordVoice.addEventListener('click', async () => {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-      mediaRecorder.stop();
-      btnRecordVoice.innerText = '🎙️ 다시 녹음';
-      btnRecordVoice.classList.remove('recording');
-    } else {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
-        mediaRecorder = new MediaRecorder(stream);
-        audioChunks = [];
-        mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
-        mediaRecorder.onstop = () => {
-          // 모바일 호환성을 위해 브라우저 기본 포맷 사용
-          const audioBlob = new Blob(audioChunks, {
-            type: mediaRecorder.mimeType || 'audio/webm',
-          });
-          myRecordedAudioUrl = URL.createObjectURL(audioBlob);
-          myRecordedAudioObj = new Audio(myRecordedAudioUrl);
-          btnPlayMyVoice.disabled = false;
-
-          // --- 녹음 볼륨 증폭 (Web Audio API) ---
-          if (!audioCtx) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          }
-          if (audioCtx.state === 'suspended') {
-            audioCtx.resume();
-          }
-
-          try {
-            // 녹음된 오디오 소스에 증폭기(GainNode) 연결
-            const source =
-              audioCtx.createMediaElementSource(myRecordedAudioObj);
-            const gainNode = audioCtx.createGain();
-
-            gainNode.gain.value = 2; // 볼륨 2배 증폭
-
-            source.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-          } catch (err) {
-            console.warn('오디오 증폭 중 오류:', err);
-          }
-
-          // --- 녹음 완료 즉시 자동 재생 ---
-          myRecordedAudioObj
-            .play()
-            .catch((e) => console.log('자동 재생 차단됨:', e));
-        };
-
-        mediaRecorder.start();
-        btnRecordVoice.innerText = '🛑 멈추기';
-        btnRecordVoice.classList.add('recording');
-      } catch (err) {
-        alert('마이크 접근이 거부되었습니다.');
+    placed.forEach((e, i) => {
+      if (i < miss) {
+        e.locked = true;
+        e.slotEl.classList.add('locked');
+      } else {
+        e.slotEl.classList.add('wrong');
       }
-    }
-  });
-
-  // 내 발음 버튼을 누르면 증폭된 상태 그대로 다시 재생됨
-  btnPlayMyVoice.addEventListener('click', () => {
-    if (myRecordedAudioObj) {
-      myRecordedAudioObj.currentTime = 0; // 처음부터 다시 재생되도록 초기화
-      myRecordedAudioObj.play();
-    }
-  });
-
-  btnPlayTts.addEventListener('click', () => {
-    playTTS(currentFullChinese);
-  });
-
-  // ---- 실수로 빠졌던 다음 문장 버튼 로직 복구 ----
-  btnNextSentence.addEventListener('click', () => {
-    hidePopup(popupSuccess);
-    window.speechSynthesis.cancel();
-    currentSentenceIndex++;
-
-    if (currentSentenceIndex < currentDayData.length) {
-      loadSentence();
-    } else {
-      buildReviewList();
-      showPopup(popupReview);
-    }
-  });
-
-  // 7. 복습 리스트 생성
-  function buildReviewList() {
-    const reviewContainer = document.getElementById('review-list');
-    reviewContainer.innerHTML = '';
-
-    currentDayData.forEach((sentenceObj, index) => {
-      const fullChinese = sentenceObj.chinese.hanzi.join('');
-      const itemDiv = document.createElement('div');
-      itemDiv.className = 'review-item';
-
-      if (mistakeTracker[index]) {
-        itemDiv.classList.add('mistake-highlight');
-      }
-
-      const textDiv = document.createElement('div');
-      textDiv.className = 'review-text';
-      textDiv.innerHTML = `<div class="r-korean">${sentenceObj.korean}</div>
-                                 <div class="r-chinese">${fullChinese}</div>`;
-
-      const playBtn = document.createElement('button');
-      playBtn.className = 'icon-btn';
-      playBtn.innerText = '🔊';
-      playBtn.addEventListener('click', () => playTTS(fullChinese));
-
-      itemDiv.appendChild(textDiv);
-      itemDiv.appendChild(playBtn);
-      reviewContainer.appendChild(itemDiv);
     });
+    setTimeout(() => {
+      placed.slice(miss).forEach(removeEntry);
+      busy = false;
+      if (miss > 0) showToast(`앞의 ${miss}개는 맞았어요! 나머지를 다시 놓아 보세요`);
+    }, 550);
   }
 
-  // 8. TTS 로직
-  function playTTS(text) {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'zh-CN';
-      utterance.rate = 0.7;
-
-      const zhVoices = synthVoices.filter((v) => v.lang.includes('zh'));
-      const femaleVoice =
-        zhVoices.find((v) => /Xiaoxiao|Ting-Ting|Google/i.test(v.name)) ||
-        zhVoices[0];
-      if (femaleVoice) utterance.voice = femaleVoice;
-
-      window.speechSynthesis.speak(utterance);
-    }
-  }
-
-  // 9. 타이머 제어
-  function startTimer(resumeTime = 30) {
+  function onSolved(revealed) {
+    solved = true;
     stopTimer();
-    timeLeft = resumeTime;
-    timerDisplay.innerText = timeLeft;
+    placed.forEach((e) => {
+      e.locked = true;
+      e.slotEl.classList.remove('wrong');
+      e.slotEl.classList.add('locked');
+    });
+    answerSlots.classList.add('all-correct');
 
+    const s = currentSentence();
+    const text = fullChinese(s);
+    if (!revealed) sfx.correct();
+    // 터치 이벤트 안에서 바로 호출해야 모바일에서 음성이 재생됨
+    playTTS(text, btnPlayTts);
+
+    const title = $('success-title');
+    if (revealed) {
+      title.textContent = '정답을 확인해요 👀';
+      title.classList.add('revealed');
+    } else {
+      const praise = session.wrong.has(currentIndex()) || session.hinted.has(currentIndex())
+        ? ['정답입니다! 🎉', '해냈어요! 👏']
+        : ['정답입니다! 🎉', '완벽해요! ✨', '한 번에 성공! 🎯'];
+      title.textContent = praise[Math.floor(Math.random() * praise.length)];
+      title.classList.remove('revealed');
+    }
+    $('success-korean').textContent = s.korean;
+    $('success-chinese').textContent = text;
+    $('success-pinyin').textContent = fullPinyin(s);
+    $('success-pinyin').classList.toggle('hidden', !store.settings.pinyin);
+
+    setTimeout(() => openPopup(popups.success), revealed ? 150 : 650);
+  }
+
+  // 힌트: 틀린 카드를 정리하고 다음 정답 카드 1장을 놓아 줌
+  $('btn-hint').addEventListener('click', () => {
+    if (busy || solved || !session) return;
+    const miss = firstMismatch();
+    if (miss !== -1) placed.slice(miss).forEach((e) => !e.locked && removeEntry(e));
+    // 맞게 놓인 앞부분은 고정
+    placed.forEach((e) => {
+      e.locked = true;
+      e.slotEl.classList.add('locked');
+    });
+    const need = target[placed.length];
+    if (!need) return;
+    const bankEl = [...wordBank.children].find(
+      (c) => !c.classList.contains('used') && c.querySelector('.hanzi').textContent === need.hanzi,
+    );
+    if (!bankEl) return;
+    session.hinted.add(currentIndex());
+    sfx.hint();
+    const entry = placeCard(need, bankEl, true);
+    entry.slotEl.classList.add('hint-glow');
+    afterPlace();
+  });
+
+  $('btn-clear').addEventListener('click', () => {
+    if (busy || solved) return;
+    if (!placed.some((e) => !e.locked)) return;
+    sfx.back();
+    removeUnlocked();
+  });
+
+  // =========================================================
+  // 6. 타이머 (시간 초과 시 멈추고 선택지 제공)
+  // =========================================================
+  let timerInterval = null;
+  let timeLeft = 30;
+  let timerPausedByHide = false;
+
+  function renderTimer() {
+    timerDisplay.textContent = timeLeft;
+    const ratio = Math.max(0, timeLeft / timeLimit);
+    timerFill.style.width = `${ratio * 100}%`;
+    timerFill.classList.toggle('warn', ratio <= 0.5 && ratio > 0.2);
+    timerFill.classList.toggle('danger', ratio <= 0.2);
+    timerBox.classList.toggle('danger', timeLeft <= 5);
+  }
+  function startTimer(seconds) {
+    stopTimer();
+    timeLeft = seconds;
+    timerFill.style.transition = 'none';
+    renderTimer();
+    void timerFill.offsetWidth;
+    timerFill.style.transition = '';
+    resumeTimer();
+  }
+  function resumeTimer() {
+    if (timerInterval || solved) return;
     timerInterval = setInterval(() => {
       timeLeft--;
-      timerDisplay.innerText = timeLeft;
-      if (timeLeft <= 0) handleErrorOrTimeout();
+      renderTimer();
+      if (timeLeft <= 0) onTimeout();
     }, 1000);
   }
-
   function stopTimer() {
     if (timerInterval) {
       clearInterval(timerInterval);
       timerInterval = null;
     }
+    timerBox.classList.remove('danger');
+  }
+  function onTimeout() {
+    stopTimer();
+    if (busy || solved) return;
+    session.wrong.add(currentIndex());
+    sfx.wrong();
+    openPopup(popups.timeout);
+  }
+  $('btn-timeout-retry').addEventListener('click', () => {
+    closePopup(popups.timeout);
+    removeUnlocked();
+    startTimer(timeLimit);
+  });
+  $('btn-timeout-answer').addEventListener('click', () => {
+    closePopup(popups.timeout);
+    session.hinted.add(currentIndex());
+    removeUnlocked();
+    // 남은 카드를 정답 순서대로 채움
+    while (placed.length < target.length) {
+      const need = target[placed.length];
+      const bankEl = [...wordBank.children].find(
+        (c) => !c.classList.contains('used') && c.querySelector('.hanzi').textContent === need.hanzi,
+      );
+      if (!bankEl) break;
+      placeCard(need, bankEl, true);
+    }
+    onSolved(true);
+  });
+
+  // 앱을 잠시 벗어나면 타이머 일시정지
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      if (timerInterval) {
+        stopTimer();
+        timerPausedByHide = true;
+      }
+      pauseBgm();
+      stopTTS();
+    } else {
+      if (timerPausedByHide && currentScreen === 'game' && popupOverlay.classList.contains('hidden')) {
+        resumeTimer();
+      }
+      timerPausedByHide = false;
+      playBgm();
+    }
+  });
+
+  // =========================================================
+  // 7. 정답 팝업 — 원어민 / 속도 / 녹음
+  // =========================================================
+  btnPlayTts.addEventListener('click', () => {
+    if (session) playTTS(fullChinese(currentSentence()), btnPlayTts);
+  });
+  btnTtsRate.addEventListener('click', () => {
+    store.settings.slow = !store.settings.slow;
+    saveStore();
+    updateRateButton();
+    if (session) playTTS(fullChinese(currentSentence()), btnPlayTts);
+  });
+
+  const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+  if (!canRecord) $('recorder-box').classList.add('hidden');
+
+  let mediaRecorder = null;
+  let micStream = null;
+  let audioChunks = [];
+  let myAudio = null;
+  let myAudioUrl = null;
+  let discardRecording = false;
+  let recordAutoStop = null;
+
+  function stopMyVoice() {
+    if (myAudio) {
+      myAudio.pause();
+      myAudio.currentTime = 0;
+    }
+  }
+  function releaseMic() {
+    if (micStream) {
+      micStream.getTracks().forEach((t) => t.stop());
+      micStream = null;
+    }
+  }
+  function stopRecording(discard) {
+    clearTimeout(recordAutoStop);
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      discardRecording = !!discard;
+      mediaRecorder.stop();
+    } else {
+      releaseMic();
+    }
+  }
+  function resetRecorderUI() {
+    stopRecording(true);
+    stopMyVoice();
+    if (myAudioUrl) URL.revokeObjectURL(myAudioUrl);
+    myAudio = null;
+    myAudioUrl = null;
+    btnPlayMyVoice.disabled = true;
+    btnRecordVoice.textContent = '🎙️ 녹음하기';
+    btnRecordVoice.classList.remove('recording');
   }
 
-  // 10. 팝업 및 화면 유틸리티
-  function showPopup(el) {
-    popupOverlay.classList.remove('hidden');
-    el.classList.remove('hidden');
+  btnRecordVoice.addEventListener('click', async () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      stopRecording(false);
+      return;
+    }
+    stopTTS();
+    stopMyVoice();
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      showToast('마이크 사용이 허용되지 않았어요. 브라우저 설정을 확인해 주세요');
+      return;
+    }
+    audioChunks = [];
+    discardRecording = false;
+    mediaRecorder = new MediaRecorder(micStream);
+    mediaRecorder.ondataavailable = (e) => e.data && e.data.size && audioChunks.push(e.data);
+    mediaRecorder.onstop = () => {
+      releaseMic(); // 마이크 사용 표시 끄기
+      btnRecordVoice.classList.remove('recording');
+      btnRecordVoice.textContent = '🎙️ 다시 녹음';
+      if (discardRecording || !audioChunks.length) return;
+
+      const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      if (myAudioUrl) URL.revokeObjectURL(myAudioUrl);
+      myAudioUrl = URL.createObjectURL(blob);
+      myAudio = new Audio(myAudioUrl);
+      btnPlayMyVoice.disabled = false;
+
+      // 녹음 볼륨 2배 증폭
+      const ctx = ensureCtx();
+      if (ctx) {
+        try {
+          const src = ctx.createMediaElementSource(myAudio);
+          const gain = ctx.createGain();
+          gain.gain.value = 2;
+          src.connect(gain);
+          gain.connect(ctx.destination);
+        } catch (err) {
+          /* 증폭 불가 환경은 원음 재생 */
+        }
+      }
+      myAudio.play().catch(() => {});
+    };
+    mediaRecorder.start();
+    btnRecordVoice.textContent = '🛑 멈추기';
+    btnRecordVoice.classList.add('recording');
+    recordAutoStop = setTimeout(() => stopRecording(false), 15000); // 최대 15초
+  });
+
+  btnPlayMyVoice.addEventListener('click', () => {
+    if (!myAudio) return;
+    stopTTS();
+    ensureCtx();
+    myAudio.currentTime = 0;
+    myAudio.play().catch(() => {});
+  });
+
+  $('btn-next-sentence').addEventListener('click', () => {
+    closePopup(popups.success);
+    stopTTS();
+    resetRecorderUI();
+    session.pos++;
+    if (session.pos < session.queue.length) {
+      saveResume();
+      loadSentence();
+    } else {
+      finishSession();
+    }
+  });
+
+  // =========================================================
+  // 8. 결과 & 복습
+  // =========================================================
+  function starsFor(missCount, total) {
+    const rate = total ? missCount / total : 0;
+    if (rate <= 0.1) return 3;
+    if (rate <= 0.3) return 2;
+    return 1;
   }
-  function hidePopup(el) {
-    popupOverlay.classList.add('hidden');
-    el.classList.add('hidden');
+
+  function finishSession() {
+    stopTimer();
+    progressFill.style.width = '100%';
+    const missed = new Set([...session.wrong, ...session.hinted]);
+    const total = session.queue.length;
+    const perfect = session.queue.filter((i) => !missed.has(i)).length;
+
+    const starsEl = $('review-stars');
+    if (session.mode === 'normal') {
+      const stars = starsFor(missed.size, total);
+      const rec = weekRecord(session.weekKey);
+      rec.best = Math.max(rec.best || 0, stars);
+      rec.cleared = true;
+      rec.resume = null;
+      saveStore();
+      $('review-title').textContent = `${weekLabel(session.weekKey)} 완료! 📚`;
+      starsEl.innerHTML = [1, 2, 3]
+        .map((n, i) => `<span class="${stars >= n ? 'on' : 'off'}" style="animation-delay:${i * 0.15}s">★</span>`)
+        .join('');
+      starsEl.classList.remove('hidden');
+    } else {
+      $('review-title').textContent = '오답 복습 완료! 🔁';
+      starsEl.classList.add('hidden');
+    }
+    sfx.clear();
+
+    $('review-stats').innerHTML = `
+      <span class="stat-chip">✅ 한 번에 성공 ${perfect}</span>
+      <span class="stat-chip bad">❌ 실수 ${session.wrong.size}</span>
+      <span class="stat-chip bad">💡 힌트 ${session.hinted.size}</span>`;
+
+    buildReviewList(missed);
+    const retryBtn = $('btn-retry-mistakes');
+    retryBtn.classList.toggle('hidden', missed.size === 0);
+    retryBtn.textContent = `🔁 틀린 문장만 다시 풀기 (${missed.size})`;
+    openPopup(popups.review);
   }
-  function switchScreen(activeScreen) {
-    document
-      .querySelectorAll('.screen')
-      .forEach((s) => s.classList.remove('active'));
-    activeScreen.classList.add('active');
-    screenIntro.classList.remove('active');
+
+  function buildReviewList(missed) {
+    const box = $('review-list');
+    box.innerHTML = '';
+    // 틀린 문장을 위로
+    const order = [...session.queue].sort((a, b) => (missed.has(b) ? 1 : 0) - (missed.has(a) ? 1 : 0));
+    order.forEach((idx) => {
+      const s = session.list[idx];
+      const item = document.createElement('div');
+      item.className = 'review-item' + (missed.has(idx) ? ' mistake-highlight' : '');
+      const text = document.createElement('div');
+      text.className = 'review-text';
+      const k = document.createElement('div');
+      k.className = 'r-korean';
+      k.textContent = s.korean;
+      const c = document.createElement('div');
+      c.className = 'r-chinese';
+      c.textContent = fullChinese(s);
+      text.append(k, c);
+      if (store.settings.pinyin) {
+        const p = document.createElement('div');
+        p.className = 'r-pinyin';
+        p.textContent = fullPinyin(s);
+        text.appendChild(p);
+      }
+      const play = document.createElement('button');
+      play.className = 'icon-btn';
+      play.textContent = '🔊';
+      play.addEventListener('click', () => playTTS(fullChinese(s)));
+      item.append(text, play);
+      box.appendChild(item);
+    });
   }
+
+  $('btn-retry-mistakes').addEventListener('click', () => {
+    const missed = [...new Set([...session.wrong, ...session.hinted])].sort((a, b) => a - b);
+    if (!missed.length) return;
+    closePopup(popups.review);
+    stopTTS();
+    startSession(session.weekKey, 'retry', { queue: missed });
+  });
+  $('btn-speak-challenge').addEventListener('click', () => {
+    closePopup(popups.review);
+    stopTTS();
+    startSpeak(session.weekKey);
+  });
+  $('btn-return-lobby').addEventListener('click', () => {
+    closePopup(popups.review);
+    goLobby();
+  });
+
+  // 게임 중 로비로 나가기
+  $('btn-ingame-lobby').addEventListener('click', () => {
+    if (!session) return goLobby();
+    stopTimer();
+    $('exit-desc').textContent =
+      session.mode === 'normal'
+        ? '지금까지 한 곳은 저장되어 다음에 이어서 할 수 있어요.'
+        : '오답 복습은 저장되지 않아요.';
+    openPopup(popups.exit);
+  });
+  $('btn-exit-confirm').addEventListener('click', () => {
+    closePopup(popups.exit);
+    saveResume();
+    goLobby();
+  });
+  $('btn-exit-cancel').addEventListener('click', () => {
+    closePopup(popups.exit);
+    resumeTimer();
+  });
+
+  // =========================================================
+  // 9. 말하기 도전 — 완성 문장을 한국어만 보고 말하기
+  // =========================================================
+  let speak = null;
+  const speakKorean = $('speak-korean');
+  const speakAnswer = $('speak-answer');
+  const speakAfter = $('speak-after');
+  const btnSpeakReveal = $('btn-speak-reveal');
+
+  function startSpeak(weekKey) {
+    const list = DATA[weekKey];
+    let items = list.filter((s) => s.isFinal);
+    if (!items.length) items = list.slice();
+    speak = { weekKey, queue: items.slice(), total: items.length, done: 0, finished: false };
+    switchScreen('speak');
+    renderSpeak();
+  }
+  function renderSpeak() {
+    const total = speak.total;
+    $('speak-progress').textContent = `${Math.min(speak.done + 1, total)} / ${total}`;
+    $('speak-progress-fill').style.width = `${(speak.done / total) * 100}%`;
+    speakAnswer.classList.add('hidden');
+    speakAfter.classList.add('hidden');
+    btnSpeakReveal.classList.remove('hidden');
+
+    if (!speak.queue.length) {
+      speak.finished = true;
+      $('speak-progress-fill').style.width = '100%';
+      $('speak-progress').textContent = `${total} / ${total}`;
+      speakKorean.textContent = `🎉 말하기 도전 완료!\n완성 문장 ${total}개를 모두 말했어요.`;
+      speakKorean.style.whiteSpace = 'pre-line';
+      btnSpeakReveal.textContent = '로비로 돌아가기';
+      sfx.clear();
+      return;
+    }
+    speakKorean.style.whiteSpace = '';
+    btnSpeakReveal.textContent = '👀 정답 확인';
+    speakKorean.textContent = speak.queue[0].korean;
+  }
+  btnSpeakReveal.addEventListener('click', () => {
+    if (speak.finished) return goLobby();
+    const s = speak.queue[0];
+    $('speak-chinese').textContent = fullChinese(s);
+    $('speak-pinyin').textContent = fullPinyin(s);
+    $('speak-pinyin').classList.toggle('hidden', !store.settings.pinyin);
+    speakAnswer.classList.remove('hidden');
+    speakAfter.classList.remove('hidden');
+    btnSpeakReveal.classList.add('hidden');
+    playTTS(fullChinese(s), $('btn-speak-tts'));
+  });
+  $('btn-speak-tts').addEventListener('click', () => {
+    if (speak && speak.queue[0]) playTTS(fullChinese(speak.queue[0]), $('btn-speak-tts'));
+  });
+  $('btn-speak-ok').addEventListener('click', () => {
+    stopTTS();
+    sfx.correct();
+    speak.queue.shift();
+    speak.done++;
+    renderSpeak();
+  });
+  $('btn-speak-again').addEventListener('click', () => {
+    stopTTS();
+    sfx.back();
+    speak.queue.push(speak.queue.shift()); // 맨 뒤로 보내서 한 번 더
+    renderSpeak();
+  });
+  $('btn-speak-back').addEventListener('click', goLobby);
 });
