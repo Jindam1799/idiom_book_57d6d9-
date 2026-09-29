@@ -11,13 +11,33 @@
     <link rel="stylesheet" href="style.css" />
 
     <script>
-      // 안드로이드 카카오톡 인앱 브라우저 → 외부 브라우저로 열기
+      // 카카오톡으로 받은 링크 → 외부 브라우저로 자동 전환
+      //  - 안드로이드: 크롬으로 열기 (크롬이 없으면 기본 브라우저)
+      //  - 아이폰: 사파리로 열기 (아이폰 크롬도 사파리 엔진이라 음성이 같음)
       (function () {
-        const ua = navigator.userAgent.toLowerCase();
-        if (ua.indexOf('kakaotalk') > -1 && ua.indexOf('android') > -1) {
+        var ua = navigator.userAgent.toLowerCase();
+        if (ua.indexOf('kakaotalk') === -1) return;
+        var isAndroid = ua.indexOf('android') > -1;
+        var isIOS = /iphone|ipad|ipod/.test(ua);
+        var cleanUrl = location.href.split('#')[0];
+        var openExternal = function (u) {
+          location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(u);
+        };
+
+        if (isAndroid) {
+          // 크롬이 없어서 되돌아온 경우 → 기본 브라우저로
+          if (/[?&]nochrome=1/.test(cleanUrl)) {
+            openExternal(cleanUrl.replace(/[?&]nochrome=1/, ''));
+            return;
+          }
+          var fallback = cleanUrl + (cleanUrl.indexOf('?') > -1 ? '&' : '?') + 'nochrome=1';
           location.href =
-            'kakaotalk://web/openExternal?url=' +
-            encodeURIComponent(window.location.href);
+            'intent://' + cleanUrl.replace(/^https?:\/\//, '') +
+            '#Intent;scheme=' + location.protocol.replace(':', '') +
+            ';package=com.android.chrome;S.browser_fallback_url=' +
+            encodeURIComponent(fallback) + ';end';
+        } else if (isIOS) {
+          openExternal(cleanUrl);
         }
       })();
     </script>
@@ -67,6 +87,16 @@
             🌟 제작 : 진담중국어 전진아<br />
             🌟 개발 : Dukimi
           </div>
+
+          <div class="copyright">
+            <p class="copyright-title">ⓒ 2026 진담중국어. All rights reserved.</p>
+            <p>
+              이 게임의 문장 구성, 학습 설계, 디자인 등 모든 콘텐츠의 저작권은
+              진담중국어에 있습니다. 무단 복제·배포·수정 및 상업적 이용을
+              금합니다.
+            </p>
+            <p class="update-date">최종 업데이트 : 2026. 09. 29 (v2.0)</p>
+          </div>
         </div>
         <div class="popup-actions-row">
           <span class="page-indicator">1 / 2</span>
@@ -78,6 +108,7 @@
 
       <div id="intro-page-2" class="popup-page hidden">
         <h2>📢 새로워진 기능</h2>
+        <p class="update-badge">2026. 09. 29 업데이트 · v2.0</p>
         <div class="intro-scroll-content">
           <h3 class="intro-sub">💡 힌트 & 부분 정답</h3>
           <p>
@@ -102,6 +133,12 @@
 
           <h3 class="intro-sub">🎙️ 녹음 & 🐢 느리게 듣기</h3>
           <p>정답 화면에서 내 발음을 녹음하고, 원어민 음성 속도를 바꿀 수 있어요.</p>
+
+          <h3 class="intro-sub">💬 카카오톡으로 받은 링크</h3>
+          <p>
+            카카오톡에서 링크를 누르면 자동으로 크롬(아이폰은 사파리)에서
+            열려요. 더 깨끗한 원어민 음성으로 학습할 수 있어요.
+          </p>
 
           <h3 class="intro-sub">📱 안드로이드 기기 이용 안내</h3>
           <p>
@@ -143,11 +180,14 @@
           </p>
         </div>
       </div>
-      <button id="btn-copy-link" class="secondary-btn full-btn">
+      <button id="btn-open-chrome" class="primary-btn full-btn">
+        🌐 크롬으로 바로 열기
+      </button>
+      <button id="btn-copy-link" class="secondary-btn full-btn mt-10">
         🔗 링크 복사하기
       </button>
-      <button id="btn-close-warning" class="primary-btn full-btn mt-10">
-        확인하고 시작하기
+      <button id="btn-close-warning" class="text-btn mt-10">
+        그냥 여기서 시작하기
       </button>
     </div>
 
@@ -263,6 +303,7 @@
             <button id="btn-toggle-pinyin-lobby" class="chip-btn">병음 ON</button>
             <button id="btn-open-intro" class="chip-btn">ⓘ 게임 소개</button>
           </div>
+          <p class="lobby-footer">ⓒ 2026 진담중국어 · v2.0 (2026.09.29)</p>
         </div>
       </section>
 

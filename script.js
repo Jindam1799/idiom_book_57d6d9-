@@ -125,6 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // TTS (중국어 원어민 음성)
   // =========================================================
   const hasTTS = 'speechSynthesis' in window;
+  const isAndroid = /android/i.test(navigator.userAgent);
   let synthVoices = [];
   let zhVoice = null;
   function loadVoices() {
@@ -138,10 +139,22 @@ document.addEventListener('DOMContentLoaded', () => {
         (v) => norm(v.lang).startsWith('zh') && !/hk|yue|mo/.test(norm(v.lang)),
       );
     }
-    zhVoice =
-      pool.find((v) => /Xiaoxiao|Xiaoyi|Tingting|Ting-Ting|Yaoyao|Huihui|Google/i.test(v.name)) ||
-      pool[0] ||
-      null;
+    // 우선순위대로 찾기
+    //  - 아이폰/맥: Tingting(여성)
+    //  - 안드로이드/크롬: Google 중국어 음성(여성)
+    //  - 그 외: 이름에 female 이 있는 음성 → 첫 번째 중국어 음성
+    const byName = (re) => pool.find((v) => re.test(v.name));
+    const isMale = (v) => /\bmale\b|男/i.test(v.name) && !/female|女/i.test(v.name);
+    const preferred = isAndroid
+      ? [/Google/i, /Tingting|Ting-Ting/i]
+      : [/Tingting|Ting-Ting/i, /Google/i];
+    zhVoice = null;
+    for (const re of preferred) {
+      zhVoice = byName(re);
+      if (zhVoice) break;
+    }
+    if (!zhVoice) zhVoice = pool.find((v) => /female|女/i.test(v.name)) || pool.find((v) => !isMale(v)) || pool[0] || null;
+    window.__ttsVoiceName = zhVoice ? zhVoice.name : '(기본 음성)'; // 확인용
   }
   if (hasTTS) {
     loadVoices();
@@ -294,6 +307,16 @@ document.addEventListener('DOMContentLoaded', () => {
     closePopup(popups.warning);
     goLobby();
   });
+  // 삼성 인터넷 → 크롬으로 열기 (크롬이 없으면 플레이스토어 크롬 페이지)
+  $('btn-open-chrome').addEventListener('click', () => {
+    const url = location.href.split('#')[0];
+    location.href =
+      'intent://' + url.replace(/^https?:\/\//, '') +
+      '#Intent;scheme=' + location.protocol.replace(':', '') +
+      ';package=com.android.chrome;S.browser_fallback_url=' +
+      encodeURIComponent('https://play.google.com/store/apps/details?id=com.android.chrome') +
+      ';end';
+  });
   $('btn-copy-link').addEventListener('click', async () => {
     const url = location.href;
     try {
@@ -329,28 +352,41 @@ document.addEventListener('DOMContentLoaded', () => {
     Object.keys(DATA).forEach((key) => {
       const rec = weekRecord(key);
       const total = DATA[key].length;
-      const btn = document.createElement('button');
-      btn.className = 'week-btn' + (rec.cleared ? ' cleared' : '');
+      const exprCount = new Set(DATA[key].map((s) => s.id)).size;
+      const num = (key.match(/\d+/) || [''])[0];
+      const hasResume = rec.resume && rec.resume.pos > 0 && rec.resume.pos < total;
 
-      const name = document.createElement('span');
-      name.className = 'w-name';
-      name.textContent = weekLabel(key);
-      const count = document.createElement('span');
-      count.className = 'w-count';
-      count.textContent = `문장 ${total}개`;
-      const stars = document.createElement('span');
-      stars.className = 'w-stars';
-      stars.innerHTML = [1, 2, 3]
-        .map((n) => `<span class="${rec.best >= n ? 'on' : ''}">★</span>`)
-        .join('');
-      btn.append(name, count, stars);
-
-      if (rec.resume && rec.resume.pos > 0 && rec.resume.pos < total) {
-        const badge = document.createElement('span');
-        badge.className = 'w-resume';
-        badge.textContent = `이어하기 ${rec.resume.pos}/${total}`;
-        btn.appendChild(badge);
+      let status = '시작하기';
+      let statusClass = '';
+      let percent = 0;
+      if (hasResume) {
+        status = `이어하기 ${rec.resume.pos} / ${total}`;
+        statusClass = 'resume';
+        percent = (rec.resume.pos / total) * 100;
+      } else if (rec.cleared) {
+        status = '완료 ✓';
+        statusClass = 'done';
+        percent = 100;
       }
+
+      const btn = document.createElement('button');
+      btn.className = 'week-card' + (rec.cleared ? ' cleared' : '');
+      btn.innerHTML = `
+        <span class="wk-num"><small>WEEK</small><b>${num}</b></span>
+        <span class="wk-body">
+          <span class="wk-top">
+            <span class="wk-title">${weekLabel(key)}</span>
+            <span class="wk-status ${statusClass}">${status}</span>
+          </span>
+          <span class="wk-meta">표현 ${exprCount}개 · 문장 ${total}개</span>
+          <span class="wk-bar"><i style="width:${percent}%"></i></span>
+        </span>
+        <span class="wk-side">
+          <span class="wk-stars">${[1, 2, 3]
+            .map((n) => `<span class="${rec.best >= n ? 'on' : ''}">★</span>`)
+            .join('')}</span>
+          <span class="wk-arrow">›</span>
+        </span>`;
       btn.addEventListener('click', () => {
         sfx.click();
         onWeekSelect(key);
