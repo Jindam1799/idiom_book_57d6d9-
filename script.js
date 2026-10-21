@@ -341,6 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 2. 로비
   // =========================================================
   function goLobby() {
+    cancelDrag();
     stopTimer();
     stopTTS();
     stopRecording(true);
@@ -495,6 +496,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const s = currentSentence();
     const g = groupInfo[currentIndex()];
 
+    cancelDrag();
     answerSlots.innerHTML = '';
     wordBank.innerHTML = '';
     answerSlots.classList.remove('all-correct');
@@ -536,12 +538,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     order.forEach((item) => {
       const card = createCard(item);
-      card.addEventListener('click', () => {
-        if (busy || solved || card.classList.contains('used')) return;
-        sfx.click();
-        placeCard(item, card);
-        afterPlace();
-      });
+      // 탭(살짝 누르기) → 맨 뒤에 놓기 / 끌기 → 원하는 자리에 놓기
+      enableDrag(
+        card,
+        () => ({ type: 'bank', item, card }),
+        () => {
+          if (busy || solved || card.classList.contains('used')) return;
+          sfx.click();
+          placeCard(item, card);
+          afterPlace();
+        },
+      );
       wordBank.appendChild(card);
     });
 
@@ -564,21 +571,35 @@ document.addEventListener('DOMContentLoaded', () => {
     return card;
   }
 
-  function placeCard(item, bankEl, locked = false) {
+  let placeSeq = 0; // 놓은 순서 (뒤로가기용)
+  function placeCard(item, bankEl, locked = false, index = placed.length) {
     bankEl.classList.add('used');
     const slotEl = createCard(item);
     slotEl.classList.add('placed');
-    const entry = { item, bankEl, slotEl, locked };
+    const entry = { item, bankEl, slotEl, locked, seq: ++placeSeq };
     if (locked) slotEl.classList.add('locked');
-    slotEl.addEventListener('click', () => {
-      if (busy || solved || entry.locked) return;
-      sfx.back();
-      removeEntry(entry);
-    });
-    placed.push(entry);
-    answerSlots.appendChild(slotEl);
+    // 탭 → 되돌리기 / 끌기 → 자리 옮기기
+    enableDrag(
+      slotEl,
+      () => ({ type: 'slot', entry }),
+      () => {
+        if (busy || solved || entry.locked || !placed.includes(entry)) return;
+        sfx.back();
+        removeEntry(entry);
+      },
+    );
+    insertEntryAt(entry, index);
     updatePlaceholder();
     return entry;
+  }
+
+  // placed 배열과 화면 순서를 함께 맞춰서 원하는 위치에 끼워 넣기
+  function insertEntryAt(entry, index) {
+    index = Math.max(0, Math.min(index, placed.length));
+    const ref = placed[index];
+    placed.splice(index, 0, entry);
+    if (ref) answerSlots.insertBefore(entry.slotEl, ref.slotEl);
+    else answerSlots.appendChild(entry.slotEl);
   }
 
   function removeEntry(entry) {
@@ -598,7 +619,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!has && !ph) {
       ph = document.createElement('span');
       ph.className = 'slots-placeholder';
-      ph.textContent = '카드를 순서대로 눌러 문장을 완성하세요';
+      ph.textContent = '카드를 누르거나 끌어다 놓아 문장을 완성하세요';
       answerSlots.appendChild(ph);
     } else if (has && ph) {
       ph.remove();
@@ -713,6 +734,184 @@ document.addEventListener('DOMContentLoaded', () => {
     removeUnlocked();
   });
 
+  // 뒤로가기: 가장 최근에 놓은 카드 1장만 되돌리기 (고정된 카드는 제외)
+  $('btn-undo').addEventListener('click', () => {
+    if (busy || solved) return;
+    const free = placed.filter((e) => !e.locked);
+    if (!free.length) return;
+    const last = free.reduce((a, b) => (b.seq > a.seq ? b : a));
+    sfx.back();
+    removeEntry(last);
+  });
+
+  // =========================================================
+  // 5-1. 드래그 — 카드를 끌어서 원하는 자리(사이)에 넣기
+  //   · 아래 카드 → 위 칸의 원하는 위치에 끼워 넣기
+  //   · 위 칸 카드 → 다른 위치로 옮기기 / 칸 밖으로 끌면 되돌리기
+  //   · 살짝 누르기(탭)는 기존처럼 동작
+  //   ※ 탭도 click 대신 pointerup 에서 직접 처리 — 드래그 직후 빠르게
+  //     탭하면 모바일 브라우저가 click 을 빠뜨리는 경우가 있어서
+  // =========================================================
+  const drag = { pending: null, active: false, ghost: null, offX: 0, offY: 0 };
+  const DRAG_THRESHOLD = 8;
+  let dropMarker = null;
+
+  function enableDrag(el, getSource, onTap) {
+    el.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (busy || solved) return;
+      if (drag.pending) {
+        if (drag.active) return; // 다른 손가락으로 끄는 중
+        drag.pending = null; // 끝나지 않은 이전 터치는 버림
+      }
+      const src = getSource();
+      if (src.type === 'slot' && src.entry.locked) return;
+      if (src.type === 'bank' && el.classList.contains('used')) return;
+      drag.pending = { el, src, onTap, x: e.clientX, y: e.clientY, id: e.pointerId };
+    });
+  }
+
+  document.addEventListener(
+    'pointermove',
+    (e) => {
+      const p = drag.pending;
+      if (!p || e.pointerId !== p.id) return;
+      if (!drag.active) {
+        if (Math.hypot(e.clientX - p.x, e.clientY - p.y) < DRAG_THRESHOLD) return;
+        if (busy || solved) {
+          drag.pending = null;
+          return;
+        }
+        beginDrag();
+      }
+      e.preventDefault();
+      moveDrag(e.clientX, e.clientY);
+    },
+    { passive: false },
+  );
+  document.addEventListener('pointerup', (e) => {
+    if (drag.pending && e.pointerId === drag.pending.id) endDrag(e.clientX, e.clientY, true);
+  });
+  document.addEventListener('pointercancel', (e) => {
+    if (drag.pending && e.pointerId === drag.pending.id) endDrag(0, 0, false);
+  });
+
+  function beginDrag() {
+    const p = drag.pending;
+    drag.active = true;
+    const r = p.el.getBoundingClientRect();
+    drag.offX = p.x - r.left;
+    drag.offY = p.y - r.top;
+    const wrap = document.createElement('div');
+    wrap.className = 'drag-ghost' + (answerSlots.classList.contains('dense') ? ' dense' : '');
+    const clone = p.el.cloneNode(true);
+    clone.className = 'word-card';
+    clone.style.width = r.width + 'px';
+    clone.style.height = r.height + 'px';
+    wrap.appendChild(clone);
+    document.body.appendChild(wrap);
+    drag.ghost = wrap;
+    p.el.classList.add('drag-origin');
+    answerSlots.classList.add('drag-on');
+  }
+
+  function moveDrag(x, y) {
+    drag.ghost.style.transform = `translate(${x - drag.offX}px, ${y - drag.offY}px) scale(1.06)`;
+    const over = isOverSlots(x, y);
+    answerSlots.classList.toggle('drag-over', over);
+    if (over) showMarker(dropIndex(x, y, drag.pending.src));
+    else hideMarker();
+  }
+
+  function isOverSlots(x, y) {
+    const r = answerSlots.getBoundingClientRect();
+    const pad = 16;
+    return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad;
+  }
+
+  // 놓을 위치 계산 (줄바꿈된 카드도 고려). 고정된(맞은) 카드 앞에는 못 넣음
+  function dropList(src) {
+    return placed.filter((e) => !(src.type === 'slot' && e === src.entry));
+  }
+  function dropIndex(x, y, src) {
+    const list = dropList(src);
+    const lockedCount = list.filter((e) => e.locked).length;
+    let idx = list.length;
+    for (let i = 0; i < list.length; i++) {
+      const r = list[i].slotEl.getBoundingClientRect();
+      if (y < r.top - 4) {
+        idx = i;
+        break;
+      }
+      if (y <= r.bottom + 4 && x < r.left + r.width / 2) {
+        idx = i;
+        break;
+      }
+    }
+    return Math.max(idx, lockedCount);
+  }
+
+  function showMarker(idx) {
+    const list = dropList(drag.pending.src);
+    if (!list.length) return hideMarker();
+    if (!dropMarker) {
+      dropMarker = document.createElement('span');
+      dropMarker.className = 'drop-marker';
+    }
+    const ref = list[idx] ? list[idx].slotEl : null;
+    if (dropMarker.parentNode === answerSlots && dropMarker.nextSibling === ref) return;
+    if (ref) answerSlots.insertBefore(dropMarker, ref);
+    else answerSlots.appendChild(dropMarker);
+  }
+  function hideMarker() {
+    if (dropMarker && dropMarker.parentNode) dropMarker.remove();
+  }
+
+  function endDrag(x, y, commit) {
+    const p = drag.pending;
+    drag.pending = null;
+    if (!drag.active) {
+      // 움직이지 않고 뗐으면 탭
+      if (commit && p.onTap) p.onTap();
+      return;
+    }
+    drag.active = false;
+
+    const over = commit && isOverSlots(x, y);
+    const idx = over ? dropIndex(x, y, p.src) : -1;
+
+    hideMarker();
+    if (drag.ghost) drag.ghost.remove();
+    drag.ghost = null;
+    p.el.classList.remove('drag-origin');
+    answerSlots.classList.remove('drag-on', 'drag-over');
+
+    if (!commit || busy || solved) return;
+
+    if (p.src.type === 'bank') {
+      if (!over || p.src.card.classList.contains('used')) return;
+      sfx.click();
+      placeCard(p.src.item, p.src.card, false, idx);
+      afterPlace();
+    } else {
+      const entry = p.src.entry;
+      if (!placed.includes(entry) || entry.locked) return;
+      if (over) {
+        placed.splice(placed.indexOf(entry), 1);
+        insertEntryAt(entry, idx);
+        sfx.click();
+        afterPlace();
+      } else {
+        sfx.back();
+        removeEntry(entry);
+      }
+    }
+  }
+
+  function cancelDrag() {
+    if (drag.pending) endDrag(0, 0, false);
+  }
+
   // =========================================================
   // 6. 타이머 (시간 초과 시 멈추고 선택지 제공)
   // =========================================================
@@ -754,6 +953,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function onTimeout() {
     stopTimer();
+    cancelDrag();
     if (busy || solved) return;
     session.wrong.add(currentIndex());
     sfx.wrong();
