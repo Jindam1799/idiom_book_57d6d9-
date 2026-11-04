@@ -461,6 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
       wrong: new Set(mode === 'normal' && resume ? resume.wrong || [] : []),
       hinted: new Set(mode === 'normal' && resume ? resume.hinted || [] : []),
     };
+    mustResolve = false;
     switchScreen('game');
     loadSentence();
   }
@@ -701,6 +702,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('success-pinyin').textContent = fullPinyin(s);
     $('success-pinyin').classList.toggle('hidden', !store.settings.pinyin);
 
+    $('btn-next-sentence').textContent = revealed ? '🔁 직접 다시 풀기' : '다음 문장 ▶';
     setTimeout(() => openPopup(popups.success), revealed ? 150 : 650);
   }
 
@@ -964,8 +966,13 @@ document.addEventListener('DOMContentLoaded', () => {
     removeUnlocked();
     startTimer(timeLimit);
   });
-  $('btn-timeout-answer').addEventListener('click', () => {
-    closePopup(popups.timeout);
+  // 👀 정답보기 (왼쪽 아래) — 정답을 보여 준 뒤, 그 문장은 직접 다시 풀어야 넘어감
+  let mustResolve = false;
+  $('btn-reveal').addEventListener('click', () => {
+    if (!session || busy || solved) return;
+    cancelDrag();
+    stopTimer();
+    mustResolve = true;
     session.hinted.add(currentIndex());
     removeUnlocked();
     // 남은 카드를 정답 순서대로 채움
@@ -1116,6 +1123,13 @@ document.addEventListener('DOMContentLoaded', () => {
     closePopup(popups.success);
     stopTTS();
     resetRecorderUI();
+    // 정답을 본 문장은 같은 문장을 처음부터 직접 다시 풀기
+    if (mustResolve) {
+      mustResolve = false;
+      loadSentence();
+      showToast('이제 직접 맞혀 보세요! 💪');
+      return;
+    }
     session.pos++;
     if (session.pos < session.queue.length) {
       saveResume();

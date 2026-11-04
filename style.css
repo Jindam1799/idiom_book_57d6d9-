@@ -902,6 +902,26 @@ body.no-pinyin .word-card .pinyin {
 @media (max-width: 360px) {
   .tool-btn { font-size: 12px; padding: 8px 8px; }
 }
+/* 왼쪽 아래 정답보기 */
+.game-footer {
+  display: flex;
+  justify-content: flex-start;
+  padding-top: 12px;
+}
+.reveal-btn {
+  background: transparent;
+  border: 1.5px dashed #cbd5e1;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 12px;
+  border-radius: 16px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.reveal-btn:active {
+  transform: scale(0.95);
+}
 .tool-btn:active {
   transform: scale(0.95);
 }
