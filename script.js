@@ -1,5 +1,6 @@
 /* =========================================================
-   진담중국어 덩어리훈련 · 관용구 — 문장 배열 게임
+   진담중국어 덩어리훈련 — 문장 배열 게임 (관용구 · 조동사 · 말버릇 공통)
+   편마다 다른 것: index.html 의 body data-store / data-mascot, style.css 맨 위 테마
    ========================================================= */
 document.addEventListener('DOMContentLoaded', () => {
   const $ = (id) => document.getElementById(id);
@@ -45,10 +46,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const DATA = window.sentenceData || {};
 
+  // 캐릭터 (mascot.js) — 없으면 아무것도 안 함
+  const mascot = (id, mood, ms, back) => window.Mascot && Mascot.render($(id), mood, ms, back);
+  if (window.Mascot) Mascot.renderAll();
+
   // =========================================================
   // 저장 (이 기기의 브라우저에만 저장됨)
   // =========================================================
-  const STORE_KEY = 'jindam_gwanyonggu_v2';
+  const STORE_KEY = document.body.dataset.store || 'jindam_chunk_v2';
   const defaultStore = () => ({
     settings: { bgm: true, pinyin: true, slow: false },
     weeks: {},
@@ -228,8 +233,60 @@ document.addEventListener('DOMContentLoaded', () => {
   function fullPinyin(s) {
     return s.chinese.pinyin.filter(Boolean).join(' ');
   }
-  function weekLabel(key) {
-    return key.replace(/^([a-z]+)(\d+)$/i, (m, w, n) => `${w.toUpperCase()} ${n}`);
+  // =========================================================
+  // 학습 단위: WEEK(전체) → DAY 1~5
+  //  · data 가 week1, week2… 이면 → 주차마다 표현을 5일로 나눔
+  //  · data 가 day1, day2… 이면 → 5일씩 묶어 WEEK 로 만듦 (DAY 키는 그대로라 기존 기록 유지)
+  // =========================================================
+  const DAYS_PER_WEEK = 5;
+  const units = {}; // key → { key, title, list, ... }
+  const weeks = []; // [{ key, num, title, list, days: [...] }]
+  (function buildUnits() {
+    const keys = Object.keys(DATA);
+    const dayKeyed = keys.length > 0 && keys.every((k) => /^day\d+$/i.test(k));
+    if (dayKeyed) {
+      for (let i = 0; i < keys.length; i += DAYS_PER_WEEK) {
+        const num = i / DAYS_PER_WEEK + 1;
+        const wk = { key: `week${num}`, num, days: [] };
+        keys.slice(i, i + DAYS_PER_WEEK).forEach((k) => {
+          const dn = (k.match(/\d+/) || [''])[0];
+          wk.days.push({ key: k, num: dn, title: `WEEK ${num} · DAY ${dn}`, list: DATA[k] });
+        });
+        wk.list = wk.days.flatMap((d) => d.list);
+        weeks.push(wk);
+      }
+    } else {
+      keys.forEach((k) => {
+        const num = (k.match(/\d+/) || [''])[0];
+        const list = DATA[k];
+        const ids = [...new Set(list.map((s) => s.id))];
+        const nDays = Math.max(1, Math.min(DAYS_PER_WEEK, ids.length));
+        const per = Math.ceil(ids.length / nDays);
+        const wk = { key: k, num, list, days: [] };
+        for (let d = 0; d < nDays; d++) {
+          const part = new Set(ids.slice(d * per, (d + 1) * per));
+          if (!part.size) continue;
+          wk.days.push({
+            key: `${k}-d${d + 1}`,
+            num: d + 1,
+            title: `WEEK ${num} · DAY ${d + 1}`,
+            list: list.filter((s) => part.has(s.id)),
+          });
+        }
+        weeks.push(wk);
+      });
+    }
+    weeks.forEach((wk) => {
+      wk.title = `WEEK ${wk.num}`;
+      units[wk.key] = wk;
+      wk.days.forEach((d) => {
+        d.week = wk;
+        units[d.key] = d;
+      });
+    });
+  })();
+  function unitTitle(key) {
+    return units[key] ? units[key].title : key;
   }
 
   // =========================================================
@@ -348,61 +405,138 @@ document.addEventListener('DOMContentLoaded', () => {
     buildLobby();
     switchScreen('lobby');
   }
+  let openWeek; // 펼쳐 둔 WEEK (처음엔 진행 중인 주를 자동으로 펼침)
+  function unitState(key) {
+    const rec = weekRecord(key);
+    const total = units[key].list.length;
+    const hasResume = !!(rec.resume && rec.resume.pos > 0 && rec.resume.pos < total);
+    return { rec, total, hasResume };
+  }
+  function starsHTML(n) {
+    return [1, 2, 3].map((i) => `<span class="${n >= i ? 'on' : ''}">★</span>`).join('');
+  }
+  function weekProgress(wk) {
+    const w = unitState(wk.key);
+    const dayStates = wk.days.map((d) => unitState(d.key));
+    const daysDone = dayStates.filter((s) => s.rec.cleared).length;
+    const anyResume = w.hasResume || dayStates.some((s) => s.hasResume);
+    const allDone = w.rec.cleared || (wk.days.length > 0 && daysDone === wk.days.length);
+    let percent = wk.days.length ? (daysDone / wk.days.length) * 100 : 0;
+    if (w.rec.cleared) percent = 100;
+    else if (w.hasResume) percent = Math.max(percent, (w.rec.resume.pos / w.total) * 100);
+    return { w, dayStates, daysDone, anyResume, allDone, percent };
+  }
+
+  const LOBBY_GREETS = [
+    '오늘도 한 덩어리씩 말해 볼까요?',
+    '소리 내어 말하면 효과가 두 배!',
+    '조금씩, 매일! 중국어가 툭!',
+    'DAY를 골라 가볍게 시작해요',
+  ];
   function buildLobby() {
     dayButtonsContainer.innerHTML = '';
-    Object.keys(DATA).forEach((key) => {
-      const rec = weekRecord(key);
-      const total = DATA[key].length;
-      const exprCount = new Set(DATA[key].map((s) => s.id)).size;
-      const num = (key.match(/\d+/) || [''])[0];
-      const hasResume = rec.resume && rec.resume.pos > 0 && rec.resume.pos < total;
-
+    if (openWeek === undefined) {
+      const cur = weeks.find((wk) => !weekProgress(wk).allDone);
+      openWeek = cur ? cur.key : null;
+    }
+    weeks.forEach((wk) => {
+      const pr = weekProgress(wk);
+      const exprCount = new Set(wk.list.map((s) => s.id)).size;
       let status = '시작하기';
       let statusClass = '';
-      let percent = 0;
-      if (hasResume) {
-        status = `이어하기 ${rec.resume.pos} / ${total}`;
+      if (pr.anyResume) {
+        status = '이어하기';
         statusClass = 'resume';
-        percent = (rec.resume.pos / total) * 100;
-      } else if (rec.cleared) {
+      } else if (pr.allDone) {
         status = '완료 ✓';
         statusClass = 'done';
-        percent = 100;
+      } else if (pr.daysDone > 0) {
+        status = `DAY ${pr.daysDone}/${wk.days.length}`;
       }
 
-      const btn = document.createElement('button');
-      btn.className = 'week-card' + (rec.cleared ? ' cleared' : '');
-      btn.innerHTML = `
-        <span class="wk-num"><small>WEEK</small><b>${num}</b></span>
+      const block = document.createElement('div');
+      block.className = 'week-block' + (openWeek === wk.key ? ' open' : '') + (pr.allDone ? ' cleared' : '');
+
+      const card = document.createElement('button');
+      card.className = 'week-card' + (pr.allDone ? ' cleared' : '');
+      card.innerHTML = `
+        <span class="wk-num"><small>WEEK</small><b>${wk.num}</b></span>
         <span class="wk-body">
           <span class="wk-top">
-            <span class="wk-title">${weekLabel(key)}</span>
+            <span class="wk-title">${wk.title}</span>
             <span class="wk-status ${statusClass}">${status}</span>
           </span>
-          <span class="wk-meta">표현 ${exprCount}개 · 문장 ${total}개</span>
-          <span class="wk-bar"><i style="width:${percent}%"></i></span>
+          <span class="wk-meta">표현 ${exprCount}개 · 문장 ${wk.list.length}개 · DAY ${wk.days.length}개</span>
+          <span class="wk-bar"><i style="width:${pr.percent}%"></i></span>
         </span>
-        <span class="wk-side">
-          <span class="wk-stars">${[1, 2, 3]
-            .map((n) => `<span class="${rec.best >= n ? 'on' : ''}">★</span>`)
-            .join('')}</span>
-          <span class="wk-arrow">›</span>
-        </span>`;
-      btn.addEventListener('click', () => {
+        <span class="wk-side"><span class="wk-arrow">›</span></span>`;
+      card.addEventListener('click', () => {
         sfx.click();
-        onWeekSelect(key);
+        openWeek = openWeek === wk.key ? null : wk.key;
+        buildLobby();
+        if (openWeek) {
+          const el = dayButtonsContainer.querySelector('.week-block.open');
+          if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
       });
-      dayButtonsContainer.appendChild(btn);
+
+      const panel = document.createElement('div');
+      panel.className = 'week-panel';
+      const grid = document.createElement('div');
+      grid.className = 'day-grid';
+      grid.style.setProperty('--cols', Math.min(5, wk.days.length));
+      wk.days.forEach((d, i) => {
+        const st = pr.dayStates[i];
+        const chip = document.createElement('button');
+        chip.className = 'day-chip' + (st.rec.cleared ? ' done' : '') + (st.hasResume ? ' resume' : '');
+        chip.innerHTML = `
+          <small>DAY</small><b>${d.num}</b>
+          <span class="day-stars">${st.rec.cleared ? starsHTML(st.rec.best) : st.hasResume ? '이어하기' : `${d.list.length}문장`}</span>`;
+        chip.addEventListener('click', () => {
+          sfx.click();
+          onUnitSelect(d.key);
+        });
+        grid.appendChild(chip);
+      });
+      const all = document.createElement('button');
+      all.className = 'week-all-btn' + (pr.w.rec.cleared ? ' done' : '');
+      const allSub = pr.w.hasResume
+        ? `이어하기 ${pr.w.rec.resume.pos} / ${pr.w.total}`
+        : `문장 ${pr.w.total}개를 한 번에`;
+      all.innerHTML = `
+        <span class="wa-icon">📚</span>
+        <span class="wa-text"><b>${wk.title} 전체 풀기</b><small>${allSub}</small></span>
+        <span class="wa-stars">${starsHTML(pr.w.rec.best || 0)}</span>`;
+      all.addEventListener('click', () => {
+        sfx.click();
+        onUnitSelect(wk.key);
+      });
+      panel.append(grid, all);
+      block.append(card, panel);
+      dayButtonsContainer.appendChild(block);
+    });
+
+    const greet = $('lobby-greet');
+    if (greet) greet.textContent = LOBBY_GREETS[Math.floor(Math.random() * LOBBY_GREETS.length)];
+    if (window.Mascot) Mascot.render($('lobby-mascot'), 'idle');
+  }
+  // 로비 캐릭터를 누르면 응원
+  const lobbyMascot = $('lobby-mascot');
+  if (lobbyMascot) {
+    lobbyMascot.addEventListener('click', () => {
+      sfx.hint();
+      Mascot.render(lobbyMascot, 'cheer', 1500);
+      const greet = $('lobby-greet');
+      if (greet) greet.textContent = LOBBY_GREETS[Math.floor(Math.random() * LOBBY_GREETS.length)];
     });
   }
 
   let pendingWeek = null;
-  function onWeekSelect(key) {
-    const rec = weekRecord(key);
-    const total = DATA[key].length;
-    if (rec.resume && rec.resume.pos > 0 && rec.resume.pos < total) {
+  function onUnitSelect(key) {
+    const { rec, hasResume } = unitState(key);
+    if (hasResume) {
       pendingWeek = key;
-      $('resume-title').textContent = weekLabel(key);
+      $('resume-title').textContent = unitTitle(key);
       $('resume-desc').textContent = `지난번에 ${rec.resume.pos}문장까지 했어요. 이어서 할까요?`;
       openPopup(popups.resume);
     } else {
@@ -448,7 +582,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function startSession(weekKey, mode, resume) {
-    const list = DATA[weekKey];
+    const unit = units[weekKey];
+    const list = unit && unit.list;
     if (!list || !list.length) return;
     groupInfo = buildGroupInfo(list);
     const queue = mode === 'retry' ? resume.queue : list.map((_, i) => i);
@@ -462,6 +597,8 @@ document.addEventListener('DOMContentLoaded', () => {
       hinted: new Set(mode === 'normal' && resume ? resume.hinted || [] : []),
     };
     mustResolve = false;
+    if (unit.week) openWeek = unit.week.key; // 로비로 돌아오면 이 주를 펼쳐 둠
+    else openWeek = unit.key;
     switchScreen('game');
     loadSentence();
   }
@@ -522,8 +659,10 @@ document.addEventListener('DOMContentLoaded', () => {
     screens.game.classList.toggle('is-final', !!s.isFinal);
     finalBadge.classList.toggle('hidden', !s.isFinal);
     retryBadge.classList.toggle('hidden', session.mode !== 'retry');
-    levelIndicator.textContent = `표현 ${g.group} · ${g.step}/${g.steps}단계`;
+    const exprNo = (String(s.id).match(/\d+/) || [g.group])[0];
+    levelIndicator.textContent = `표현 ${exprNo} · ${g.step}/${g.steps}단계`;
     koreanSentence.textContent = s.korean;
+    mascot('game-mascot', 'idle');
 
     const total = session.queue.length;
     progressText.textContent = `${session.pos + 1} / ${total}`;
@@ -649,6 +788,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     session.wrong.add(currentIndex());
     sfx.wrong();
+    mascot('game-mascot', 'sad', 1500);
     busy = true;
 
     screens.game.classList.remove('shake-screen');
@@ -683,6 +823,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const s = currentSentence();
     const text = fullChinese(s);
     if (!revealed) sfx.correct();
+    const clean = !session.wrong.has(currentIndex()) && !session.hinted.has(currentIndex());
+    mascot('game-mascot', revealed ? 'think' : 'happy');
+    mascot('success-mascot', revealed ? 'think' : clean ? 'cheer' : 'happy');
     // 터치 이벤트 안에서 바로 호출해야 모바일에서 음성이 재생됨
     playTTS(text, btnPlayTts);
 
@@ -724,6 +867,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!bankEl) return;
     session.hinted.add(currentIndex());
     sfx.hint();
+    mascot('game-mascot', 'think', 1200);
     const entry = placeCard(need, bankEl, true);
     entry.slotEl.classList.add('hint-glow');
     afterPlace();
@@ -959,11 +1103,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (busy || solved) return;
     session.wrong.add(currentIndex());
     sfx.wrong();
+    mascot('game-mascot', 'sad');
     openPopup(popups.timeout);
   }
   $('btn-timeout-retry').addEventListener('click', () => {
     closePopup(popups.timeout);
     removeUnlocked();
+    mascot('game-mascot', 'idle');
     startTimer(timeLimit);
   });
   // 👀 정답보기 (왼쪽 아래) — 정답을 보여 준 뒤, 그 문장은 직접 다시 풀어야 넘어감
@@ -1164,12 +1310,14 @@ document.addEventListener('DOMContentLoaded', () => {
       rec.cleared = true;
       rec.resume = null;
       saveStore();
-      $('review-title').textContent = `${weekLabel(session.weekKey)} 완료! 📚`;
+      $('review-title').textContent = `${unitTitle(session.weekKey)} 완료! 📚`;
       starsEl.innerHTML = [1, 2, 3]
         .map((n, i) => `<span class="${stars >= n ? 'on' : 'off'}" style="animation-delay:${i * 0.15}s">★</span>`)
         .join('');
       starsEl.classList.remove('hidden');
+      mascot('review-mascot', stars >= 3 ? 'cheer' : 'happy');
     } else {
+      mascot('review-mascot', 'happy');
       $('review-title').textContent = '오답 복습 완료! 🔁';
       starsEl.classList.add('hidden');
     }
@@ -1267,7 +1415,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSpeakReveal = $('btn-speak-reveal');
 
   function startSpeak(weekKey) {
-    const list = DATA[weekKey];
+    const list = units[weekKey].list;
     let items = list.filter((s) => s.isFinal);
     if (!items.length) items = list.slice();
     speak = { weekKey, queue: items.slice(), total: items.length, done: 0, finished: false };
@@ -1289,12 +1437,14 @@ document.addEventListener('DOMContentLoaded', () => {
       speakKorean.textContent = `🎉 말하기 도전 완료!\n완성 문장 ${total}개를 모두 말했어요.`;
       speakKorean.style.whiteSpace = 'pre-line';
       btnSpeakReveal.textContent = '로비로 돌아가기';
+      mascot('speak-mascot', 'cheer');
       sfx.clear();
       return;
     }
     speakKorean.style.whiteSpace = '';
     btnSpeakReveal.textContent = '👀 정답 확인';
     speakKorean.textContent = speak.queue[0].korean;
+    mascot('speak-mascot', 'think');
   }
   btnSpeakReveal.addEventListener('click', () => {
     if (speak.finished) return goLobby();
@@ -1305,6 +1455,7 @@ document.addEventListener('DOMContentLoaded', () => {
     speakAnswer.classList.remove('hidden');
     speakAfter.classList.remove('hidden');
     btnSpeakReveal.classList.add('hidden');
+    mascot('speak-mascot', 'happy');
     playTTS(fullChinese(s), $('btn-speak-tts'));
   });
   $('btn-speak-tts').addEventListener('click', () => {

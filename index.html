@@ -52,7 +52,7 @@
       })();
     </script>
   </head>
-  <body>
+  <body data-mascot="whale" data-store="jindam_gwanyonggu_v2">
     <audio id="bgm-lobby" src="lobby.mp3" loop preload="auto"></audio>
 
     <div id="popup-overlay" class="hidden"></div>
@@ -105,7 +105,7 @@
               진담중국어에 있습니다. 무단 복제·배포·수정 및 상업적 이용을
               금합니다.
             </p>
-            <p class="update-date">최종 업데이트 : 2026. 11. 04 (v2.2)</p>
+            <p class="update-date">최종 업데이트 : 2026. 11. 09 (v2.3)</p>
           </div>
         </div>
         <div class="popup-actions-row">
@@ -118,9 +118,21 @@
 
       <div id="intro-page-2" class="popup-page hidden">
         <h2>📢 새로워진 기능</h2>
-        <p class="update-badge">2026. 11. 04 업데이트 · v2.2</p>
+        <p class="update-badge">2026. 11. 09 업데이트 · v2.3</p>
         <div class="intro-scroll-content">
-          <h3 class="intro-sub">👀 정답보기 (NEW)</h3>
+          <h3 class="intro-sub">📅 DAY 골라 풀기 (NEW)</h3>
+          <p>
+            로비에서 WEEK를 누르면 <strong>DAY 1~5</strong> 중 골라서 조금씩 풀 수
+            있어요. 한 주를 한 번에 풀고 싶으면 📚 WEEK 전체 풀기를 누르세요.
+          </p>
+
+          <h3 class="intro-sub">🐾 새 친구 아기고래 (NEW)</h3>
+          <p>
+            아기고래가 옆에서 함께 훈련해요. 맞히면 기뻐하고, 틀리면 같이
+            아쉬워해요. 로비에서 아기고래를 눌러 보세요!
+          </p>
+
+          <h3 class="intro-sub">👀 정답보기</h3>
           <p>
             막히면 화면 왼쪽 아래 👀 정답보기로 정답을 확인할 수 있어요. 단,
             정답을 본 문장은 <strong>직접 한 번 더 맞혀야</strong> 다음 문장으로
@@ -145,13 +157,13 @@
 
           <h3 class="intro-sub">📝 이어하기 & 별점</h3>
           <p>
-            중간에 나가도 이 기기에서 이어서 할 수 있고, 주차별 최고 별점이
+            중간에 나가도 이 기기에서 이어서 할 수 있고, DAY·WEEK별 최고 별점이
             기록됩니다.
           </p>
 
           <h3 class="intro-sub">🔁 오답 다시 풀기 & 🗣️ 말하기 도전</h3>
           <p>
-            한 주를 끝내면 틀린 문장만 다시 풀 수 있고, 한국어만 보고
+            DAY나 WEEK를 끝내면 틀린 문장만 다시 풀 수 있고, 한국어만 보고
             중국어로 말해 보는 말하기 도전도 할 수 있어요.
           </p>
 
@@ -232,6 +244,7 @@
 
     <!-- 3. 시간 초과 팝업 -->
     <div id="popup-timeout" class="popup hidden">
+      <div class="popup-mascot" data-mascot-slot="sad"></div>
       <h2 class="timeout-title">⏰ 시간 초과!</h2>
       <p>천천히 다시 도전해 볼까요?<br />막히면 왼쪽 아래 <strong>👀 정답보기</strong>를 눌러 보세요.</p>
       <div class="stack-btns">
@@ -243,6 +256,7 @@
 
     <!-- 4. 정답 팝업 -->
     <div id="popup-success" class="popup hidden">
+      <div id="success-mascot" class="popup-mascot" data-mascot-slot="happy"></div>
       <h2 id="success-title" class="success-title">정답입니다! 🎉</h2>
       <div class="completed-sentence-box">
         <p id="success-korean"></p>
@@ -274,6 +288,7 @@
 
     <!-- 5. 복습(결과) 팝업 -->
     <div id="popup-review" class="popup popup-tall hidden">
+      <div id="review-mascot" class="popup-mascot" data-mascot-slot="cheer"></div>
       <h2 id="review-title">오늘의 복습 📚</h2>
       <div id="review-stars" class="review-stars"></div>
       <div id="review-stats" class="review-stats"></div>
@@ -292,6 +307,7 @@
 
     <!-- 6. 로비로 나가기 확인 팝업 -->
     <div id="popup-exit" class="popup hidden">
+      <div class="popup-mascot small" data-mascot-slot="think"></div>
       <h2>로비로 나갈까요?</h2>
       <p id="exit-desc">지금까지 한 곳은 저장되어 다음에 이어서 할 수 있어요.</p>
       <div class="stack-btns">
@@ -304,6 +320,10 @@
       <!-- 인트로 -->
       <section id="screen-intro" class="screen active">
         <div class="intro-content">
+          <div class="intro-mascot">
+            <div class="speech">중국어가 입에서 툭!</div>
+            <div class="mascot-big" data-mascot-slot="happy"></div>
+          </div>
           <p class="pre-title">진심이 담긴</p>
           <h1 class="logo-title">진담중국어</h1>
           <p class="intro-course">중국어 덩어리훈련 · 관용구</p>
@@ -315,8 +335,12 @@
       <section id="screen-lobby" class="screen">
         <div class="lobby-wrap">
           <header class="lobby-header">
-            <p class="pre-title small">진담중국어 덩어리훈련</p>
-            <h1 class="lobby-title">관용구</h1>
+            <button id="lobby-mascot" class="lobby-mascot" data-mascot-slot="idle" aria-label="아기고래"></button>
+            <div class="lobby-head-text">
+              <p class="pre-title small">진담중국어 덩어리훈련</p>
+              <h1 class="lobby-title">관용구</h1>
+              <p id="lobby-greet" class="lobby-greet">오늘도 한 덩어리씩 말해 볼까요?</p>
+            </div>
           </header>
           <div id="day-buttons" class="grid-container"></div>
           <div class="lobby-settings">
@@ -324,7 +348,7 @@
             <button id="btn-toggle-pinyin-lobby" class="chip-btn">병음 ON</button>
             <button id="btn-open-intro" class="chip-btn">ⓘ 게임 소개</button>
           </div>
-          <p class="lobby-footer">ⓒ 2026 진담중국어 · v2.2 (2026.11.04)</p>
+          <p class="lobby-footer">ⓒ 2026 진담중국어 · v2.3 (2026.11.09)</p>
         </div>
       </section>
 
@@ -350,6 +374,7 @@
               <span id="retry-badge" class="badge badge-retry hidden">🔁 오답 복습</span>
             </div>
             <div class="korean-box">
+              <div id="game-mascot" class="game-mascot" data-mascot-slot="idle"></div>
               <h2 id="korean-sentence">한국어 문장</h2>
             </div>
             <div class="timer-track">
@@ -394,6 +419,7 @@
           <p class="speak-instruction">한국어를 보고 <strong>중국어로 먼저 소리 내어</strong> 말한 뒤 정답을 확인하세요.</p>
 
           <div class="speak-card">
+            <div id="speak-mascot" class="speak-mascot" data-mascot-slot="think"></div>
             <p id="speak-korean" class="speak-korean"></p>
             <div id="speak-answer" class="speak-answer hidden">
               <p id="speak-chinese" class="speak-chinese"></p>
@@ -417,6 +443,7 @@
 
     <div id="toast" class="toast hidden"></div>
 
+    <script src="mascot.js"></script>
     <script src="data.js"></script>
     <script src="script.js"></script>
   </body>
